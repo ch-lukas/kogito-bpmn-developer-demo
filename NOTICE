@@ -1,0 +1,30 @@
+kogito-bpmn-demo
+Copyright 2026 Luke Audie
+
+This product includes software derived from work developed by
+The Apache Software Foundation (https://www.apache.org/) as part of the
+Apache KIE (incubating) project (https://kie.apache.org/).
+
+In particular, the contents of `src/runtime/` are forked from the
+`process-usertasks-quarkus` example in the
+`apache/incubator-kie-kogito-examples` repository, branch `10.1.x`:
+
+  https://github.com/apache/incubator-kie-kogito-examples/tree/10.1.x/kogito-quarkus-examples/process-usertasks-quarkus
+
+That code is licensed under the Apache License, Version 2.0:
+
+  http://www.apache.org/licenses/LICENSE-2.0
+
+Modifications applied here:
+  - pom.xml: added kie-addons-quarkus-process-management,
+    kie-addons-quarkus-process-svg, kie-addons-quarkus-source-files.
+  - src/main/resources/application.properties: added CORS configuration,
+    dev-services switches, and kogito.service.url.
+  - src/main/java/org/acme/travels/RootResource.java: added a CORS-friendly
+    JAX-RS root endpoint to support the KIE Management Console's auth probe.
+
+Apache KIE (incubating) is an effort undergoing incubation at The Apache
+Software Foundation (ASF), sponsored by the Apache Incubator. Incubation is
+required of all newly accepted projects until a further review indicates that
+the infrastructure, communications, and decision making process have
+stabilized in a manner consistent with other successful ASF projects.

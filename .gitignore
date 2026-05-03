@@ -1,0 +1,23 @@
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Build outputs
+src/runtime/target/
+src/runtime/.mvn/wrapper/maven-wrapper.jar
+src/runtime/dependency-reduced-pom.xml
+
+# Runtime state
+src/runtime/rockdstemp/
+src/runtime/data/
+node_modules/
+
+# Logs
+logs/*.log
+
+# Local environment
+.env
+.env.local
+*.local
