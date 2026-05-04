@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Reverse of run.sh. Safe to run repeatedly even if nothing is running.
+# Reverse of 1-run.sh. Safe to run repeatedly even if nothing is running.
 set -uo pipefail
 
 GREEN='\033[0;32m'; CYAN='\033[1;36m'; RESET='\033[0m'
@@ -31,10 +31,18 @@ if pids=$(pgrep -f 'quarkus:dev' 2>/dev/null); then
   echo "$pids" | xargs kill 2>/dev/null && ok "stopped quarkus dev mode"
 fi
 
-# Stale port holders just in case
-for port in 8090 8080; do
+# Stale port holders just in case (the Quarkus mvn fork sometimes leaves an
+# orphan JVM behind that doesn't match the 'quarkus:dev' grep above).
+for port in 8080 8090; do
   if pids=$(lsof -ti:$port 2>/dev/null); then
-    echo "$pids" | xargs kill 2>/dev/null && ok "freed port $port"
+    # Try graceful first, then force.
+    echo "$pids" | xargs kill 2>/dev/null
+    sleep 0.5
+    if remaining=$(lsof -ti:$port 2>/dev/null); then
+      echo "$remaining" | xargs kill -9 2>/dev/null && ok "force-freed port $port"
+    else
+      ok "freed port $port"
+    fi
   fi
 done
 

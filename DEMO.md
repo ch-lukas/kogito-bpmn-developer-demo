@@ -1,7 +1,7 @@
 # BPMN on Apache KIE / Kogito — Live Demo Script
 
 A click-by-click walkthrough designed to be delivered live in **~10 minutes** to a
-mixed audience (target: ~70% business, ~30% technical). Visuals carry the story.
+mixed audience (i.e. solution architects, process automation, workflow engineers). Visuals carry the story.
 
 > **Format conventions**
 > 🖱  *Click / action you perform*
@@ -13,50 +13,98 @@ mixed audience (target: ~70% business, ~30% technical). Visuals carry the story.
 
 ## Scene 0 — Pre-flight (do this BEFORE the audience joins)
 
-You need **four things** running and **four browser tabs** ready.
+### One command starts everything
 
-### Things running
+```bash
+./1-run.sh
+```
 
-| # | What | Command | Notes |
-|---|---|---|---|
-| 1 | Quarkus runtime + Data Index | `mvn clean compile quarkus:dev` from this directory | Wait for "Listening on: http://0.0.0.0:8080" |
-| 2 | CORS proxy | `node cors-proxy.js` from this directory | Routes 8090 → runtime/data-index with CORS headers |
-| 3 | KIE Management Console | `docker run -d --name kogito-mgmt-console -p 8280:8080 apache/incubator-kie-kogito-management-console:10.1.0` | Already running from earlier setup |
-| 4 | Task Console *(optional)* | `docker run -d --name kogito-task-console -p 8380:8080 -e RUNTIME_TOOLS_TASK_CONSOLE_KOGITO_ENV_MODE=DEV -e KOGITO_CONSOLES_KEYCLOAK_DISABLE_HEALTH_CHECK=true -e RUNTIME_TOOLS_TASK_CONSOLE_DATA_INDEX_ENDPOINT=http://localhost:8090/graphql apache/incubator-kie-kogito-task-console:main` | Skip if pressed for time — Management Console covers tasks too |
+It checks prereqs, clears any previous state, starts the Quarkus runtime,
+CORS proxy, Management Console, Task Console, and auto-opens three
+browser tabs. Wait for "Demo is live." and the tabs to appear.
 
-Set `JAVA_HOME` first: `export JAVA_HOME=$(/usr/libexec/java_home -v 17)`.
+### One-time: connect the Management Console to the runtime
 
-### Browser tabs (don't open until needed — keep them fresh on screen)
+The first time you load http://localhost:8280/ in a fresh browser profile,
+you'll see a **"Welcome to Apache KIE™ Management Console"** screen with a
+**+ Connect to a runtime…** button. The console stores connections in
+browser localStorage, so you only do this **once per browser profile**.
 
-1. **VS Code** with `src/main/resources/org/acme/travels/approval.bpmn` open
+🖱  Click **+ Connect to a runtime…**
+
+In the dialog:
+- **Alias:** `local`
+- **URL:** `http://localhost:8090`
+- Leave **Force login prompt** unchecked (the local runtime is unsecured —
+  the proxy answers the auth probes for it).
+- Ignore **Advanced OpenID Connect settings**.
+
+🖱  Click **Connect**.
+
+You should land on the Process Instances page. The connection persists —
+on the next `./1-run.sh`, you'll skip straight to it.
+
+> If you ever need to reconnect (e.g. you cleared cookies), come back to
+> http://localhost:8280/ and the same dialog appears.
+
+### Browser tabs (auto-opened by `1-run.sh`)
+
+1. **http://localhost:8280/** — KIE Management Console (the headline visual)
 2. **http://localhost:8080/q/swagger-ui/** — auto-generated REST surface
-3. **http://localhost:8280/** — KIE Management Console (connect with `local` / `http://localhost:8090`)
-4. **http://localhost:8380/** *(optional)* — Task Console
+3. **http://localhost:8080/q/dev-ui/** — Quarkus Dev UI (extensions, dev tools)
+
+The Task Console at **http://localhost:8380/** is also running but not
+auto-opened — the Management Console covers tasks too. Open the Task
+Console manually if you want to demo the end-user inbox UI separately.
+
+You'll likely also want **VS Code** open on
+`workflow/src/main/resources/org/acme/travels/approval.bpmn` for Scene 1
+and Scene 6 (the BPMN editor).
 
 ### Sanity checks
 ```bash
-curl -s localhost:8080/approvals      # → []
-curl -s localhost:8090/orders -o /dev/null -w "proxy: %{http_code}\n"  # → 404 expected (we use /approvals here, not /orders)
-curl -s localhost:8090/approvals -o /dev/null -w "proxy: %{http_code}\n"  # → 200
+curl -s localhost:8080/approvals                           # → []
+curl -s localhost:8090/approvals -o /dev/null -w "%{http_code}\n"   # → 200 (via proxy)
+curl -sI localhost:8280 | head -1                           # → 200 OK
 ```
 
-> Cold-start build can be slow — if needed, start Scene 1 while Quarkus is still booting.
+> Cold-start build can be slow (~30-90s on first run, longer if pulling
+> images). The consoles are amd64-only and run under Rosetta on M-series
+> Macs — give them ~30s after the container starts before they're truly
+> usable.
 
 ---
 
-## Scene 1 — "What is a BPMN process?" (the model in VS Code)
+## Scene 1 — "A simple Claims process?" (the BPMN model in VS Code)
 
-🖱  Switch to **VS Code**, open `approval.bpmn`. The graphical editor renders.
+💬  *"Picture a typical claims approval: a customer submits a claim, a
+front-line analyst gives it a first look, and then a senior analyst signs it
+off. To prevent fraud, the two approvers must be different people. That's the
+process we're going to model — four steps end-to-end:*
 
-👀 Audience sees a left-to-right flow:
+1. *A claim arrives (kicks the process off — no human needed).*
+2. ***First-line approval*** *— a manager reviews the claim and decides.*
+3. ***Second-line approval*** *— a different manager double-checks and signs off.*
+4. *The claim is closed (paid out, rejected, or routed onward).*
+
+*That's a real compliance pattern called the **four-eye principle** — and we'll
+see in a moment that the engine enforces 'different people' for us, no
+application code required."*
+
+🖱  Switch to **VS Code**, open `workflow/src/main/resources/org/acme/travels/approval.bpmn`. The graphical editor renders.
+
+![Approval process](docs/screenshots/02-vscode.png)
+
+👀 Audience sees a left-to-right flow that maps onto exactly those four steps:
 *Start ▶ "First Line Approval" (user task) ▶ "Second Line Approval" (user task) ▶ End*
 
 💬  *"BPMN — Business Process Model and Notation — is a visual standard for
 modelling business processes. Every shape has a precise meaning. The circle on
-the left is a **start event**. The rounded rectangles with the little person
-icon are **user tasks** — steps that need a human. This particular model
-implements a real compliance pattern: the **four-eye principle**. Approvals
-must be made by two different managers — the engine itself enforces this."*
+the left is a **start event** — that's step 1. The rounded rectangles with the
+little person icon are **user tasks** — steps that need a human, our two
+approvals. The circle on the right is the **end event**. The arrows are
+sequence flow — they say what runs next. That's almost the whole vocabulary
+you need to read this diagram."*
 
 🖱  Click **First Line Approval**. Properties panel opens.
 
@@ -66,8 +114,10 @@ must be made by two different managers — the engine itself enforces this."*
 XML. But you and a business analyst can read this together, and what you see
 is what runs in production."*
 
-💡 *(if asked)* The file is `.bpmn` — pure BPMN 2.0 standard. Same file would
-run on Camunda, Flowable, jBPM, or Kogito.
+💡 *(if asked)* The file is `.bpmn` — pure BPMN 2.0 standard. The flow itself
+is portable; the data-mapping and assignment annotations used here are
+Kogito/jBPM extensions, so a perfect 1:1 swap to Camunda or Flowable would
+need their equivalent extensions wired in.
 
 ---
 
@@ -100,7 +150,7 @@ to Java at build time. Hence the fast startup and native-image friendliness.
 
 👀 Audience sees the console UI, navigation: Process Instances, Jobs, Tasks.
 
-🖱  In a terminal: `./demo.sh` and press Enter to advance to step 2 (POST /approvals).
+🖱  In a terminal: `./2-demo.sh` and press Enter twice to advance to step 2 (POST /approvals).
 
 👀 The script POSTs an approval payload (a `traveller`) and prints the new instance UUID.
 
@@ -109,17 +159,26 @@ now it's parked on the first-line approval, waiting for a human."*
 
 🖱  Switch to the Management Console → click **Process Instances** in the side nav.
 
-👀 A row appears with status `ACTIVE`.
+👀 A row appears with state `Active`.
 
 🖱  Click the row.
 
-👀 The BPMN diagram renders, with a **highlighted token** sitting on
-"First Line Approval". This is the headline visual.
+👀 Detail page loads. Breadcrumb reads
+`local (Unknown user @ http://localhost:8090) > Process Instances > {uuid}`.
+Three panels are visible:
+- **Details** — Name `approvals`, State `Active`, the instance Id, and an
+  **Endpoint** of `http://localhost:8090` (that's the CORS proxy the console
+  talks to — same URL we wired up in Scene 0).
+- **Variables** — the exact `traveller` JSON we just POSTed, live from the
+  engine.
+- **Timeline** — `StartProcess` ✓ a few seconds ago, then **First Line
+  Approval — Active** with a person icon.
 
-💬  *"Live state. The engine is telling us exactly where in the process
-this instance is. Imagine a customer-facing dashboard showing the same view —
-'your loan application is at the credit check stage'. That's what this is
-giving you for free."*
+💬  *"Live state. The engine is telling us exactly where in the process this
+instance is — parked on First Line Approval, waiting for a human, and the
+variables it's carrying are right there. Imagine a customer-facing dashboard
+rendering this same timeline — 'your loan application is at the credit check
+stage'. That's what this is giving you for free."*
 
 ---
 
@@ -133,56 +192,70 @@ giving you for free."*
 group. Real production would use OIDC for auth. For demo purposes the
 console has an Impersonate feature."*
 
-🖱  Click the **Impersonate** dropdown (top of page or in user menu).
+🖱  Expand the **Impersonating** panel at the top of the Tasks page (the
+collapsible card labelled "Impersonating 'Anonymous'" — click the chevron).
 
-🖱  Set:
+🖱  Fill in:
 - **User:** `manager`
-- **Groups:** `managers`
+- **Groups:** `managers`  *(helper text: "Comma-separated list, no spaces.")*
 - Click **Apply**.
 
-👀 The First Line Approval task now appears in the list.
+👀 Panel collapses; the header now reads `Impersonating 'manager'`. The
+**First Line Approval** task appears in the list with a **Reserved** badge
+next to its name.
 
-🖱  Click it → details panel opens (Owner: `manager`, Group: `managers`, State: `Reserved`).
+🖱  Click the task → form panel renders showing the Traveller fields
+(Address > City "Boston", Country "US", Nationality "American", etc.).
 
-🖱  In the form / actions panel, click **Complete** (or whatever the transition button is).
+🖱  **Tick the `Approved` checkbox**, then click **Complete**.
+*(Buttons available: **Complete / Release / Skip**.)*
 
-👀 Task disappears. Back to Process Instances → click the row → token has
-moved to "Second Line Approval".
+💬  *"That checkbox isn't hand-coded UI — it's auto-generated from the BPMN
+task's `approved: Boolean` data output. Whatever the manager ticks here
+flows back into the process variables. Watch."*
 
-💬  *"First approval done. The engine moved the token to the next step.
-Now the four-eye part — let me try to approve it again as the same person…"*
+👀 Task disappears from the inbox. Back to **Process Instances** → click the
+row → **Variables** now contains an extra `approved: true`, and the
+**Timeline** shows First Line Approval ✓ and **Second Line Approval —
+Active**.
+
+💬  *"First approval done — and the engine recorded who approved it. Now the
+four-eye part: I'll try to approve the second step as the same person…"*
 
 ---
 
 ## Scene 5 — "The four-eye principle in action"
 
-🖱  Tasks tab. The Second Line task is visible (still impersonating `manager`).
+🖱  Stay on the **Tasks** tab, still impersonating `manager`.
 
-🖱  Try to click the **Complete** button on it.
+👀 The inbox is **empty**. The Second Line Approval task is *not visible* to
+this user.
 
-👀 (Depending on how the BPMN enforces it) the action either:
-- silently does nothing
-- shows an error
-- the task disappears but the process won't progress
+💬  *"That's the four-eye principle — at the model level. The BPMN wires the
+second task's `ExcludedOwnerId` to whoever completed the first task, so the
+engine quietly removes that user from the second task's candidate list.
+Nothing for me to enforce in application code; the rule is in the diagram."*
 
-💬  *"In a real implementation, the engine would block the same user from
-completing both. Let me switch users to demonstrate."*
+💡 *(if asked)* See `approval.bpmn` — the Second Line Approval task has an
+`ExcludedOwnerId` input mapped from the first task's `ActorId` output. Pure
+BPMN; portable.
 
-🖱  **Impersonate** again, this time:
-- **User:** `mary` (or anyone else)
+🖱  Re-open the **Impersonating** panel and switch:
+- **User:** `mary`
 - **Groups:** `managers`
-- **Apply**.
+- Click **Apply**.
 
-🖱  Click **Tasks** — the second-line task is visible to mary.
+👀 Inbox now shows **Second Line Approval — Reserved**.
 
-🖱  Complete it.
+🖱  Click it → tick **Approved** → **Complete**.
 
-👀 Process Instances → the row disappears (process completed). Filter to
-**Completed** → click → diagram shows token at end event.
+👀 **Process Instances** with the default (Active) filter: the row is gone.
+Switch the filter to **Completed** → click the row → the **Timeline** shows
+StartProcess ✓, First Line Approval ✓, Second Line Approval ✓, EndProcess ✓.
 
-💬  *"That's the full lifecycle. Started by a REST call, advanced by two
-different humans, completed cleanly. The compliance rule was enforced by
-the model — no application code needed."*
+💬  *"Full lifecycle. Started by a REST call, advanced by two different
+humans, completed cleanly. The compliance rule was enforced by the model —
+no application code needed."*
 
 ---
 
@@ -193,11 +266,13 @@ the model — no application code needed."*
 🖱  Click the **First Line Approval** task → in properties, change its name
 to "**Compliance Check**". Save.
 
-🖱  Run `./demo.sh` again, or POST another `/approvals` via Swagger UI.
+🖱  Run `./2-demo.sh` again, or POST another `/approvals` via Swagger UI.
 
 🖱  Switch to Management Console → Process Instances → click the new row.
 
-👀 Diagram now shows the renamed task. **No restart.** Hot reload.
+👀 The **Timeline** lists the renamed step (`Compliance Check — Active`)
+instead of `First Line Approval`, and the Tasks inbox shows the new name
+too. **No restart.** Hot reload.
 
 💬  *"That's the developer loop: business analyst edits the model, save,
 new process instances pick it up immediately. In production you'd version
@@ -207,12 +282,21 @@ the model alongside your service."*
 
 ## Scene 7 — "What about production?"
 
-💬  *"Three things I'm not showing today, but they're part of this stack:"*
+💬  *"Four things I'm not showing today, but they're part of this stack:"*
 
-1. **Persistence** — RocksDB / Postgres / Infinispan plug-and-play.
+1. **Persistence** — RocksDB for embedded, Postgres for shared/clustered. Plug-and-play.
 2. **Eventing** — Process events to Kafka, so other services can subscribe.
 3. **Native compilation** — `mvn package -Pnative` produces a ~50 MB
    stand-alone binary that boots in ~50 ms. Great for serverless.
+4. **Kubernetes / OpenShift** — Quarkus produces a standard OCI image, so the
+   workflow is just another container in your cluster. The
+   [**Kogito Operator**](https://docs.kogito.kie.org/latest/html_single/#chap-kogito-deploying-on-openshift)
+   on OpenShift takes that further: define a `KogitoRuntime` custom resource
+   pointing at your image, and the operator wires up the deployment, service,
+   route, persistence, and Kafka connections for you. The Management and Task
+   Consoles ship as their own operator-managed resources too. Same model on
+   vanilla Kubernetes via Helm charts; OpenShift adds developer-console
+   integration and S2I builds from a Git repo.
 
 💬  *"And the auth piece — in production the Impersonate dropdown is
 replaced by Keycloak / Okta / Azure AD. The user identity flows through to
@@ -235,12 +319,13 @@ the engine and the four-eye principle becomes a real audit trail."*
 
 ## Cleanup
 
-🖱  Terminal A: `Ctrl+C` to stop dev mode.
-🖱  Terminal B (proxy): `Ctrl+C`.
-🖱  Stop the consoles: `docker rm -f kogito-mgmt-console kogito-task-console` if you started them just for the demo.
+🖱  Stop everything (workflow, proxy, both consoles) with one command:
+```bash
+./3-teardown.sh
+```
 🖱  Revert the BPMN edit if you want a clean repo:
 ```bash
-git checkout -- src/main/resources/org/acme/travels/approval.bpmn
+git checkout -- workflow/src/main/resources/org/acme/travels/approval.bpmn
 ```
 
 ---

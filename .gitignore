@@ -5,13 +5,13 @@
 *.swp
 
 # Build outputs
-src/runtime/target/
-src/runtime/.mvn/wrapper/maven-wrapper.jar
-src/runtime/dependency-reduced-pom.xml
+workflow/target/
+workflow/.mvn/wrapper/maven-wrapper.jar
+workflow/dependency-reduced-pom.xml
 
 # Runtime state
-src/runtime/rockdstemp/
-src/runtime/data/
+workflow/rockdstemp/
+workflow/data/
 node_modules/
 
 # Logs
