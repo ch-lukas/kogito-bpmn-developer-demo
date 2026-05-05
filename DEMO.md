@@ -375,6 +375,55 @@ returns a URL.
 👀 In a few minutes a live Quarkus pod runs the same BPMN we've been
 editing — but inside Kubernetes, not on your laptop directly.
 
+### Verifying the deployment
+
+The fastest signal is in the editor: the **Dev Deployments ▾** panel
+shows a status badge per deployment.
+
+- 🟡 **In progress** — image building / pod scheduling (~30–60 s)
+- 🟢 **Ready** — pod is `Running` and ingress URL responds. The entry becomes a clickable link to the deployed app's Swagger UI.
+- 🔴 **Error** — click the entry for the message.
+
+If you want ground truth from `kubectl`:
+
+```bash
+# Pods and ingress in the deployments namespace
+kubectl --context kind-kie-sandbox-dev-cluster \
+  -n local-kie-sandbox-dev-deployments get deploy,svc,ingress,pods
+
+# Pod logs (replace <pod>)
+kubectl --context kind-kie-sandbox-dev-cluster \
+  -n local-kie-sandbox-dev-deployments logs <pod> --tail=50
+```
+
+A successful deploy shows `READY 1/1`, `STATUS Running`, and an Ingress
+with a `HOSTS` value.
+
+To prove the *deployed BPMN itself* answers REST calls (same shape as
+Scene 3, just inside the cluster):
+
+```bash
+HOST=$(kubectl --context kind-kie-sandbox-dev-cluster \
+  -n local-kie-sandbox-dev-deployments \
+  get ingress -o jsonpath='{.items[0].spec.rules[0].host}')
+
+curl -sH "Host: $HOST" http://localhost/q/health/ready              # → {"status":"UP",…}
+curl -sH "Host: $HOST" -H 'Content-Type: application/json' \
+  -d '{"traveller":{"firstName":"Dev","lastName":"Deploy","email":"x","nationality":"x","address":{"street":"x","city":"x","zipCode":"x","country":"x"}}}' \
+  http://localhost/approvals
+```
+
+A JSON response with an `id` field on the second call means the
+deployed BPMN is live — same proof your local Quarkus on `:8080` gives
+you, just running inside Kubernetes.
+
+| Symptom | Likely cause |
+|---|---|
+| Stays 🟡 for >2 min | Quarkus base image pull on first deploy (~250 MB) — keep waiting. |
+| 🔴 "ImagePullBackOff" | `kubectl describe pod <pod>` shows the registry it tried. |
+| 🟢 but `curl` returns 502 | Ingress controller hasn't reloaded — wait 5 s and retry. |
+| Pod `CrashLoopBackOff` | BPMN has a build error; Kogito codegen failure shows in pod logs. |
+
 💬  *"That's the same artefact — same `approval.bpmn` we've been
 editing — going from analyst-laptop to a Kubernetes cluster with no
 build step on my side. The editor packaged it; the cluster runs it.
