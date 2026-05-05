@@ -118,7 +118,12 @@ Demo is live. Open these in your browser:
   Data Index GraphiQL    http://localhost:8180/graphiql/
 ```
 
-When you're done: `./3-teardown.sh`.
+When you're done: `./3-teardown.sh` — stops every service, removes the
+kind cluster, and prunes the Docker images the demo pulled (~2 GB
+reclaimed). Persistent process state in `./data/` and your installed
+binaries (`kind`, `kubectl`, JDK, Maven, Node) are kept. Use
+`./3-teardown.sh --full` to also wipe `./data` and uninstall `kind` /
+`kubectl` via brew.
 
 ### Drive the process end-to-end
 

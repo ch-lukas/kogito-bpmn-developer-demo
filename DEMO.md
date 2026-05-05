@@ -426,10 +426,20 @@ the engine and the four-eye principle becomes a real audit trail."*
 
 ## Cleanup
 
-🖱  Stop everything (workflow, proxy, both consoles) with one command:
+🖱  Stop everything (workflow, proxy, consoles, editor, kind cluster) and reclaim the Docker images we pulled:
 ```bash
 ./3-teardown.sh
 ```
+By default this leaves `kind` / `kubectl` installed and preserves
+`./data/` (the RocksDB persistence). Variants:
+
+| Flag | Adds to default |
+|---|---|
+| `--keep-images` | Leave Docker images on disk (faster next start) |
+| `--keep-kind`   | Leave the kind cluster running |
+| `--wipe-data`   | Also delete `./data` (forget all process history) |
+| `--full`        | Wipe `./data` AND uninstall `kind` + `kubectl` (best-effort, brew on macOS) |
+
 🖱  Revert the BPMN edit if you want a clean repo:
 ```bash
 git checkout -- workflow/src/main/resources/org/acme/travels/approval.bpmn

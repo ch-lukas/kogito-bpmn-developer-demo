@@ -85,9 +85,9 @@ if [[ "${1:-}" == "--check" ]]; then ok "Prerequisite check complete."; exit 0; 
 # -----------------------------------------------------------------------------
 if [[ "${1:-}" != "--no-teardown" ]]; then
   say "Clearing any previous demo state…"
-  # --keep-kind: avoid the 60-90s kind cluster recreate on every run.
-  # The kind cluster is idempotent; re-applying ingress/SAs below is a no-op.
-  "$REPO_ROOT/3-teardown.sh" --keep-kind >/dev/null 2>&1 || true
+  # --keep-kind:   avoid the 60-90s kind cluster recreate on every run.
+  # --keep-images: the new run is about to pull these again.
+  "$REPO_ROOT/3-teardown.sh" --keep-kind --keep-images >/dev/null 2>&1 || true
   ok "Previous state cleared"
 fi
 
