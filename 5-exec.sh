@@ -13,6 +13,8 @@
 #   ./5-exec.sh swagger                      # open Swagger UI in browser
 #   ./5-exec.sh health                       # GET /q/health/ready
 #   ./5-exec.sh ls                           # list all deployments in the cluster
+#   ./5-exec.sh console                      # print the alias + URL to paste
+#                                            # into the cloud Mgmt Console (:8281)
 #   ./5-exec.sh list   [process-id]          # list active instances
 #   ./5-exec.sh start  [process-id] [json]   # POST a new instance
 #   ./5-exec.sh get    [process-id] <iid>    # GET one instance
@@ -123,6 +125,20 @@ case "$cmd" in
     list_deployments
     ;;
 
+  console)
+    prefix=$(discover_prefix)
+    # prefix looks like /dev-deployment-<id>; strip the leading "/dev-deployment-"
+    deploy_id="${prefix#/dev-deployment-}"
+    [[ -n "$deploy_id" && "$deploy_id" != "$prefix" ]] || die "Unexpected deployment path: $prefix"
+    info "Open the cloud Mgmt Console:  http://localhost:8281"
+    info "Click '+ Connect to a runtime…' and paste these:"
+    printf '\n'
+    printf '  %-8s %s\n' "Alias:"  "cloud"
+    printf '  %-8s %s\n' "URL:"    "http://localhost:8090/cluster/${deploy_id}"
+    printf '\n'
+    info "(The /cluster/<id> path is rewritten by cors-proxy to ${prefix} on the kind ingress.)"
+    ;;
+
   list)
     proc=${1:-$DEFAULT_PROCESS}
     call GET "/${proc}" | pretty
@@ -154,6 +170,6 @@ case "$cmd" in
     ;;
 
   *)
-    die "Unknown command: $cmd  (try: url|swagger|health|ls|list|start|get|tasks|complete)"
+    die "Unknown command: $cmd  (try: url|swagger|health|ls|console|list|start|get|tasks|complete)"
     ;;
 esac

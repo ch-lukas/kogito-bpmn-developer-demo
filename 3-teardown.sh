@@ -54,7 +54,7 @@ DEMO_IMAGE_PATTERNS=(
 say "Stopping demo services…"
 
 # Console + editor containers
-for c in kogito-mgmt-console kogito-task-console kogito-bpmn-editor; do
+for c in kogito-mgmt-console kogito-mgmt-console-cloud kogito-task-console kogito-bpmn-editor; do
   if docker rm -f "$c" >/dev/null 2>&1; then ok "removed $c container"; fi
 done
 

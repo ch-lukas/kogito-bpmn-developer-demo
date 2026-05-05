@@ -183,6 +183,19 @@ docker run -d --name kogito-task-console -p 8380:8080 \
 wait_http "http://localhost:8380/" 90 "Task Console"
 ok "Task Console up on :8380"
 
+# Second Mgmt Console for Sandbox-deployed apps in the kind cluster.
+# Same image as the local one; the user just connects it to a different
+# runtime URL via the in-app "Connect to a runtime" wizard. Skipped if
+# Dev Deployments was opted out (no point — there's no cluster to point at).
+if (( SKIP_DEVDEPLOY == 0 )); then
+  say "Starting Mgmt Console (cloud) on :8281"
+  docker rm -f kogito-mgmt-console-cloud >/dev/null 2>&1 || true
+  docker run -d --name kogito-mgmt-console-cloud -p 8281:8080 \
+    apache/incubator-kie-kogito-management-console:10.1.0 >/dev/null
+  wait_http "http://localhost:8281/" 90 "Mgmt Console (cloud)"
+  ok "Mgmt Console (cloud) up on :8281"
+fi
+
 say "Starting BPMN Editor (local sandbox.kie.org) on :8480"
 docker rm -f kogito-bpmn-editor >/dev/null 2>&1 || true
 docker run -d --name kogito-bpmn-editor --platform linux/amd64 -p 8480:8080 \
@@ -287,6 +300,10 @@ printf "  ${GREEN}%-26s${RESET} %s\n" "BPMN Editor (Sandbox)" "http://localhost:
 printf "  ${YELLOW}%-26s${RESET} %s\n" "  → Open file from URL"  "http://localhost:8090/bpmn/approval.bpmn"
 printf "  ${GREEN}%-26s${RESET} %s\n" "Management Console"  "http://localhost:8280"
 printf "  ${YELLOW}%-26s${RESET} %s\n" "  → Connect with"     "alias=local   URL=http://localhost:8090"
+if (( SKIP_DEVDEPLOY == 0 )); then
+  printf "  ${GREEN}%-26s${RESET} %s\n" "Mgmt Console (cloud)" "http://localhost:8281"
+  printf "  ${YELLOW}%-26s${RESET} %s\n" "  → After deploy run"  "./5-exec.sh console  # prints alias + URL to paste"
+fi
 printf "  ${GREEN}%-26s${RESET} %s\n" "Task Console"        "http://localhost:8380"
 printf "  ${GREEN}%-26s${RESET} %s\n" "Swagger UI"          "http://localhost:8080/q/swagger-ui/"
 printf "  ${GREEN}%-26s${RESET} %s\n" "Quarkus Dev UI"      "http://localhost:8080/q/dev-ui/"

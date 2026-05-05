@@ -19,6 +19,9 @@ const { URL } = require('node:url');
 const PORT = Number(process.env.PORT || 8090);
 const RUNTIME = new URL(process.env.RUNTIME || 'http://localhost:8080');
 const DATA_INDEX = new URL(process.env.DATA_INDEX || 'http://localhost:8180');
+// The kind cluster's nginx ingress on host:80 — the Sandbox's Dev
+// Deployments hang off path-prefixes there (e.g. /dev-deployment-<id>).
+const CLUSTER_INGRESS = new URL(process.env.CLUSTER_INGRESS || 'http://localhost');
 
 // Static file the BPMN Editor (local Sandbox on :8480) imports via URL.
 // Served from the live source tree so analysts always pull the current file.
@@ -82,13 +85,26 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  const target = pickTarget(req.url);
+  // /cluster/<deployId>/<rest> — rewrite to /dev-deployment-<deployId>/<rest>
+  // and forward to the kind ingress on :80. Lets a Mgmt Console connect to
+  // a Sandbox-deployed app via this proxy so CORS works the same as for
+  // the local runtime.
+  const clusterMatch = req.url.match(/^\/cluster\/([A-Za-z0-9_-]+)(\/.*)?$/);
+  let target;
+  let upstreamPath;
+  if (clusterMatch) {
+    target = CLUSTER_INGRESS;
+    upstreamPath = `/dev-deployment-${clusterMatch[1]}${clusterMatch[2] || '/'}`;
+  } else {
+    target = pickTarget(req.url);
+    upstreamPath = req.url;
+  }
 
   const upstream = http.request(
     {
       host: target.hostname,
       port: target.port || 80,
-      path: req.url,
+      path: upstreamPath,
       method: req.method,
       headers: { ...req.headers, host: target.host },
     },
@@ -115,7 +131,8 @@ const server = http.createServer((req, res) => {
 
 server.listen(PORT, () => {
   console.log(`[cors-proxy] listening on http://localhost:${PORT}`);
-  console.log(`[cors-proxy]   /graphql*  → ${DATA_INDEX.origin}`);
-  console.log(`[cors-proxy]   /bpmn/*    → ${BPMN_DIR}`);
-  console.log(`[cors-proxy]   everything else → ${RUNTIME.origin}`);
+  console.log(`[cors-proxy]   /graphql*           → ${DATA_INDEX.origin}`);
+  console.log(`[cors-proxy]   /bpmn/*             → ${BPMN_DIR}`);
+  console.log(`[cors-proxy]   /cluster/<id>/*     → ${CLUSTER_INGRESS.origin}/dev-deployment-<id>/*`);
+  console.log(`[cors-proxy]   everything else     → ${RUNTIME.origin}`);
 });
