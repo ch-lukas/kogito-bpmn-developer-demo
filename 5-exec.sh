@@ -15,6 +15,8 @@
 #   ./5-exec.sh ls                           # list all deployments in the cluster
 #   ./5-exec.sh console                      # print the alias + URL to paste
 #                                            # into the cloud Mgmt Console (:8281)
+#   ./5-exec.sh viewer [process-id]          # open a read-only KIE editor
+#                                            # rendering the deployed BPMN
 #   ./5-exec.sh list   [process-id]          # list active instances
 #   ./5-exec.sh start  [process-id] [json]   # POST a new instance
 #   ./5-exec.sh get    [process-id] <iid>    # GET one instance
@@ -139,6 +141,19 @@ case "$cmd" in
     info "(The /cluster/<id> path is rewritten by cors-proxy to ${prefix} on the kind ingress.)"
     ;;
 
+  viewer)
+    proc=${1:-$DEFAULT_PROCESS}
+    prefix=$(discover_prefix)
+    deploy_id="${prefix#/dev-deployment-}"
+    [[ -n "$deploy_id" && "$deploy_id" != "$prefix" ]] || die "Unexpected deployment path: $prefix"
+    url="http://localhost:8090/viewer/${deploy_id}/${proc}"
+    info "Opening read-only KIE editor: $url"
+    if   command -v open     >/dev/null; then open "$url"
+    elif command -v xdg-open >/dev/null; then xdg-open "$url"
+    else printf '%s\n' "$url"
+    fi
+    ;;
+
   list)
     proc=${1:-$DEFAULT_PROCESS}
     call GET "/${proc}" | pretty
@@ -170,6 +185,6 @@ case "$cmd" in
     ;;
 
   *)
-    die "Unknown command: $cmd  (try: url|swagger|health|ls|console|list|start|get|tasks|complete)"
+    die "Unknown command: $cmd  (try: url|swagger|health|ls|console|viewer|list|start|get|tasks|complete)"
     ;;
 esac
