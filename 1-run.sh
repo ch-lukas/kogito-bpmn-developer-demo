@@ -218,6 +218,21 @@ if (( SKIP_DEVDEPLOY == 0 )); then
   if kind get clusters 2>/dev/null | grep -qx "$KIND_CLUSTER_NAME"; then
     say "kind cluster '$KIND_CLUSTER_NAME' already exists — reusing."
     # Cluster's own control-plane container holds ports 80/443; that's expected.
+
+    # If Docker Desktop was restarted between runs, the control-plane node
+    # container is stopped *and* its host-side API port has shifted, so
+    # ~/.kube/config still points at the old port. Start the node and
+    # refresh kubeconfig before the cluster-info check.
+    cp_container="${KIND_CLUSTER_NAME}-control-plane"
+    if ! docker inspect -f '{{.State.Running}}' "$cp_container" 2>/dev/null | grep -qx true; then
+      say "Starting stopped kind node ($cp_container)…"
+      docker start "$cp_container" >/dev/null 2>&1 || warn "could not start $cp_container — cluster may be broken"
+      for ((i=0; i<30; i++)); do
+        docker exec "$cp_container" sh -c 'true' >/dev/null 2>&1 && break
+        sleep 1
+      done
+    fi
+    kind export kubeconfig --name "$KIND_CLUSTER_NAME" >/dev/null 2>&1 || true
   else
     # Port 80 is required by the kind cluster's ingress port-mapping. Only
     # checked when we're about to *create* the cluster — if the cluster is
@@ -239,7 +254,9 @@ if (( SKIP_DEVDEPLOY == 0 )); then
   fi
 
   # kind create cluster sets kubectl context to kind-<name> automatically.
-  kubectl cluster-info --context "kind-$KIND_CLUSTER_NAME" >/dev/null \
+  # Use /healthz instead of `cluster-info`: works across kubectl/server skew
+  # and isn't fooled by RBAC noise on the default kubernetes-admin user.
+  kubectl --context "kind-$KIND_CLUSTER_NAME" get --raw=/healthz >/dev/null 2>&1 \
     || die "kubectl can't reach kind context kind-$KIND_CLUSTER_NAME."
 
   say "Installing nginx ingress controller…"
