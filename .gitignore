@@ -12,6 +12,7 @@ workflow/dependency-reduced-pom.xml
 # Runtime state
 workflow/rockdstemp/
 workflow/data/
+data/
 node_modules/
 
 # Logs

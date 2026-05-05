@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
 # One-command bootstrap for the Kogito BPMN live demo.
-# Starts the workflow, the data-index, the CORS proxy, and both consoles.
+# Starts the workflow, data-index, CORS proxy, both consoles, the local
+# KIE Sandbox editor, and a kind cluster wired up for the Sandbox's Dev
+# Deployments feature.
 #
 # Usage:
-#   ./1-run.sh           # start everything in the background
-#   ./1-run.sh --check   # only run prerequisite checks
+#   ./1-run.sh                  # start everything in the background
+#   ./1-run.sh --check          # only run prerequisite checks
+#   ./1-run.sh --no-devdeploy   # skip the kind cluster + Dev Deployments setup
+#   ./1-run.sh --no-open        # don't auto-open browser tabs
+#   ./1-run.sh --no-teardown    # don't clear previous state first
 #
 # Stop everything with: ./3-teardown.sh
 
@@ -13,7 +18,18 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
 RUNTIME_DIR="$REPO_ROOT/workflow"
 LOG_DIR="$REPO_ROOT/logs"
-mkdir -p "$LOG_DIR"
+DATA_DIR="$REPO_ROOT/data"
+mkdir -p "$LOG_DIR" "$DATA_DIR"
+
+# Flag parsing — match anywhere in $@
+FLAGS=" $* "
+SKIP_DEVDEPLOY=0
+[[ "$FLAGS" == *" --no-devdeploy "* ]] && SKIP_DEVDEPLOY=1
+
+# Pinned versions / names used by Dev Deployments
+KIND_CLUSTER_NAME="kie-sandbox-dev-cluster"
+DEVDEPLOY_NS="local-kie-sandbox-dev-deployments"
+INGRESS_MANIFEST_URL="https://kind.sigs.k8s.io/examples/ingress/deploy-ingress-nginx.yaml"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[1;36m'; RESET='\033[0m'
 say()  { printf "${CYAN}▶ %s${RESET}\n" "$*"; }
@@ -33,6 +49,11 @@ say "Checking prerequisites…"
 check_cmd docker "Install Docker Desktop: https://www.docker.com/products/docker-desktop/"
 check_cmd mvn    "Install Maven: 'brew install maven' on macOS"
 check_cmd node   "Install Node 18+: 'brew install node' on macOS"
+
+if (( SKIP_DEVDEPLOY == 0 )); then
+  check_cmd kind    "Install kind: 'brew install kind' on macOS, or see https://kind.sigs.k8s.io/docs/user/quick-start/. Skip Dev Deployments with: ./1-run.sh --no-devdeploy"
+  check_cmd kubectl "Install kubectl: 'brew install kubectl' on macOS, or see https://kubernetes.io/docs/tasks/tools/. Skip Dev Deployments with: ./1-run.sh --no-devdeploy"
+fi
 
 # JDK 17 specifically (Kogito 10.1.x requires it)
 if [[ -z "${JAVA_HOME:-}" || ! -x "$JAVA_HOME/bin/java" ]]; then
@@ -64,7 +85,9 @@ if [[ "${1:-}" == "--check" ]]; then ok "Prerequisite check complete."; exit 0; 
 # -----------------------------------------------------------------------------
 if [[ "${1:-}" != "--no-teardown" ]]; then
   say "Clearing any previous demo state…"
-  "$REPO_ROOT/3-teardown.sh" >/dev/null 2>&1 || true
+  # --keep-kind: avoid the 60-90s kind cluster recreate on every run.
+  # The kind cluster is idempotent; re-applying ingress/SAs below is a no-op.
+  "$REPO_ROOT/3-teardown.sh" --keep-kind >/dev/null 2>&1 || true
   ok "Previous state cleared"
 fi
 
@@ -168,6 +191,91 @@ wait_http "http://localhost:8480/" 90 "BPMN Editor"
 ok "BPMN Editor up on :8480"
 
 # -----------------------------------------------------------------------------
+# Dev Deployments — kind cluster + ingress + Sandbox API proxy / SAs
+# Lets the BPMN Editor's "Dev Deployments" feature deploy a process to a
+# real Kubernetes target. YAML is fetched live from the editor container so
+# it always matches the Sandbox version we shipped on :8480.
+# Skip with: ./1-run.sh --no-devdeploy
+# -----------------------------------------------------------------------------
+DEVDEPLOY_INFO_FILE="$LOG_DIR/devdeploy-wizard.txt"
+DEVDEPLOY_API_URL=""
+DEVDEPLOY_TOKEN=""
+
+if (( SKIP_DEVDEPLOY == 0 )); then
+  # Port 80 is required by the kind cluster's ingress port-mapping.
+  if pids=$(lsof -ti:80 2>/dev/null) && [[ -n "$pids" ]]; then
+    warn "Port 80 is in use by PID(s): $pids — Dev Deployments needs it for the kind ingress."
+    warn "Free port 80 and re-run, or skip with: ./1-run.sh --no-devdeploy"
+    die "Aborting Dev Deployments setup."
+  fi
+
+  if kind get clusters 2>/dev/null | grep -qx "$KIND_CLUSTER_NAME"; then
+    say "kind cluster '$KIND_CLUSTER_NAME' already exists — reusing."
+  else
+    say "Creating kind cluster '$KIND_CLUSTER_NAME' (~60-90s)…"
+    KIND_CFG="$LOG_DIR/kind-cluster-config.yaml"
+    curl -sf "http://localhost:8480/dev-deployments/kubernetes/cluster-config/kind-cluster-config.yaml" -o "$KIND_CFG" \
+      || die "Could not fetch kind config from the BPMN Editor on :8480."
+    if ! kind create cluster --config "$KIND_CFG" > "$LOG_DIR/kind-create.log" 2>&1; then
+      tail -20 "$LOG_DIR/kind-create.log" >&2
+      die "kind cluster creation failed. See $LOG_DIR/kind-create.log."
+    fi
+    ok "kind cluster '$KIND_CLUSTER_NAME' up"
+  fi
+
+  # kind create cluster sets kubectl context to kind-<name> automatically.
+  kubectl cluster-info --context "kind-$KIND_CLUSTER_NAME" >/dev/null \
+    || die "kubectl can't reach kind context kind-$KIND_CLUSTER_NAME."
+
+  say "Installing nginx ingress controller…"
+  kubectl apply --context "kind-$KIND_CLUSTER_NAME" -f "$INGRESS_MANIFEST_URL" \
+    > "$LOG_DIR/ingress-apply.log" 2>&1 || die "Ingress apply failed. See $LOG_DIR/ingress-apply.log."
+  kubectl wait --context "kind-$KIND_CLUSTER_NAME" --namespace ingress-nginx \
+    --for=condition=ready pod --selector=app.kubernetes.io/component=controller \
+    --timeout=180s >/dev/null 2>&1 || warn "Ingress controller not ready in 180s — continuing anyway."
+  ok "Ingress controller ready"
+
+  say "Applying Sandbox Dev Deployments resources (proxy, RBAC, namespace)…"
+  RESOURCES_YAML="$LOG_DIR/sandbox-resources.yaml"
+  curl -sf "http://localhost:8480/dev-deployments/kubernetes/cluster-config/kie-sandbox-dev-deployments-resources.yaml" -o "$RESOURCES_YAML" \
+    || die "Could not fetch Sandbox resources from the BPMN Editor on :8480."
+  # The bundled Ingress declares pathType: Prefix with a regex path, which
+  # modern nginx-ingress (>= v1.10) rejects via its validation webhook. The
+  # nginx annotations on the same Ingress treat the path as a regex anyway,
+  # so ImplementationSpecific is the correct pathType here.
+  sed -i.bak 's/pathType: Prefix/pathType: ImplementationSpecific/g' "$RESOURCES_YAML"
+  kubectl apply --context "kind-$KIND_CLUSTER_NAME" -f "$RESOURCES_YAML" \
+    > "$LOG_DIR/sandbox-resources-apply.log" 2>&1 \
+    || die "Sandbox resources apply failed. See $LOG_DIR/sandbox-resources-apply.log."
+
+  say "Waiting for the kube-apiserver proxy pod…"
+  kubectl wait --context "kind-$KIND_CLUSTER_NAME" --namespace default \
+    --for=condition=ready pod --selector=app=kube-apiserver-proxy \
+    --timeout=180s >/dev/null 2>&1 || warn "kube-apiserver-proxy not ready in 180s — continuing."
+
+  # Token may take a moment to populate in the secret.
+  say "Extracting Sandbox service-account token…"
+  for ((i=0; i<20; i++)); do
+    DEVDEPLOY_TOKEN=$(kubectl get secret kie-sandbox-secret --context "kind-$KIND_CLUSTER_NAME" \
+      -n default -o jsonpath='{.data.token}' 2>/dev/null | base64 --decode 2>/dev/null || true)
+    [[ -n "$DEVDEPLOY_TOKEN" ]] && break
+    sleep 1
+  done
+  [[ -n "$DEVDEPLOY_TOKEN" ]] || warn "Could not read kie-sandbox-secret token. Try: kubectl -n default get secret kie-sandbox-secret -o jsonpath='{.data.token}' | base64 -d"
+
+  DEVDEPLOY_API_URL="http://localhost/kube-apiserver"
+  {
+    echo "# Paste these into the BPMN Editor's 'Connect to Kubernetes' wizard."
+    echo "# Editor: http://localhost:8480 → Dev Deployments → Connect to an account…"
+    echo
+    echo "Namespace:           $DEVDEPLOY_NS"
+    echo "Kubernetes API URL:  $DEVDEPLOY_API_URL"
+    echo "Token:               $DEVDEPLOY_TOKEN"
+  } > "$DEVDEPLOY_INFO_FILE"
+  ok "Dev Deployments ready (wizard values saved to $DEVDEPLOY_INFO_FILE)"
+fi
+
+# -----------------------------------------------------------------------------
 # Final URLs
 # -----------------------------------------------------------------------------
 echo
@@ -181,6 +289,15 @@ printf "  ${GREEN}%-26s${RESET} %s\n" "Task Console"        "http://localhost:83
 printf "  ${GREEN}%-26s${RESET} %s\n" "Swagger UI"          "http://localhost:8080/q/swagger-ui/"
 printf "  ${GREEN}%-26s${RESET} %s\n" "Quarkus Dev UI"      "http://localhost:8080/q/dev-ui/"
 printf "  ${GREEN}%-26s${RESET} %s\n" "Data Index GraphiQL" "http://localhost:8180/graphiql/"
+
+if (( SKIP_DEVDEPLOY == 0 )) && [[ -n "$DEVDEPLOY_TOKEN" ]]; then
+  echo
+  printf "${CYAN}▶ Dev Deployments — paste these into the editor's wizard:${RESET}\n"
+  printf "  ${GREEN}%-22s${RESET} %s\n" "Namespace"          "$DEVDEPLOY_NS"
+  printf "  ${GREEN}%-22s${RESET} %s\n" "Kubernetes API URL" "$DEVDEPLOY_API_URL"
+  printf "  ${GREEN}%-22s${RESET} %s\n" "Token"              "${DEVDEPLOY_TOKEN:0:20}…  (full token: $DEVDEPLOY_INFO_FILE)"
+  printf "  ${YELLOW}Editor route:${RESET}        http://localhost:8480 → Dev Deployments ▾ → Connect to an account…\n"
+fi
 echo
 
 # -----------------------------------------------------------------------------

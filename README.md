@@ -44,8 +44,19 @@ becomes an inspectable, observable, auditable event in a real system.
 | JDK 17 | 17.x | `brew install --cask temurin@17` | `sudo apt install temurin-17-jdk` (after [adding the Adoptium repo](https://adoptium.net/installation/linux/)) | `winget install EclipseAdoptium.Temurin.17.JDK` |
 | Maven | 3.9+ | `brew install maven` | `sudo apt install maven` | `winget install Apache.Maven` |
 | Node | 18+ | `brew install node` | `sudo apt install nodejs npm` | `winget install OpenJS.NodeJS.LTS` |
+| kind *(for Dev Deployments)* | 0.20+ | `brew install kind` | [kind quick start](https://kind.sigs.k8s.io/docs/user/quick-start/) | `winget install Kubernetes.kind` |
+| kubectl *(for Dev Deployments)* | 1.28+ | `brew install kubectl` | `sudo apt install kubectl` (after [adding the k8s apt repo](https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/)) | `winget install Kubernetes.kubectl` |
+
+> **kind / kubectl are only required if you want the Dev Deployments demo.** Skip them with `./1-run.sh --no-devdeploy` and you'll get the analyst loop without a local Kubernetes cluster.
 
 > **For analysts who never touch the terminal after `./1-run.sh`** — JDK and Maven are needed *once*, so the workflow's REST endpoints can be regenerated from the BPMN diagram on startup. Everything after that happens in the browser.
+
+### Persistence
+
+Active process instances are stored in an embedded RocksDB at `./data/`
+on the host. Process state survives Quarkus restarts and even
+`./3-teardown.sh && ./1-run.sh`, so a demo audience can pick up where
+the previous one left off. Wipe with `./3-teardown.sh --wipe-data`.
 
 `1-run.sh` checks all of these and explains anything missing. On Windows,
 run the script from **WSL2** — the orchestration relies on a POSIX shell.
@@ -79,7 +90,8 @@ cd kogito-bpmn-developer-demo
 1. Verify prerequisites (and auto-set `JAVA_HOME` to your JDK 17 on macOS).
 2. Pull / retag the required Docker images (works around an upstream tag mismatch).
 3. Start the Quarkus workflow, the CORS proxy, both consoles, and the local **BPMN Editor (Sandbox)**.
-4. Print the URLs to open.
+4. Create a `kind` Kubernetes cluster, install nginx ingress, apply the Sandbox's API proxy + RBAC, and print the wizard values for **Dev Deployments** *(unless `--no-devdeploy`)*.
+5. Print the URLs and Dev Deployments wizard values.
 
 #### Running `1-run.sh` on each OS
 

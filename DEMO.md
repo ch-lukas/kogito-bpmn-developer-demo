@@ -21,8 +21,22 @@ mixed audience (i.e. solution architects, process automation, workflow engineers
 
 It checks prereqs, clears any previous state, starts the Quarkus runtime,
 CORS proxy, Management Console, Task Console, **BPMN Editor (your local
-sandbox.kie.org)**, and auto-opens four browser tabs. Wait for "Demo is
-live." and the tabs to appear.
+sandbox.kie.org)**, **a kind Kubernetes cluster wired up for the editor's
+Dev Deployments feature**, and auto-opens four browser tabs. Wait for
+"Demo is live." and the tabs to appear.
+
+> First run is slow (~3–5 min) because of the kind cluster + ingress
+> controller. Subsequent runs reuse the cluster and start in ~90 s.
+> Skip the cluster entirely with `./1-run.sh --no-devdeploy` if you only
+> need the analyst loop.
+
+### Persistence
+
+Active process instances are stored in an embedded RocksDB at `./data/`
+on the host, so they survive Quarkus restarts and even `./3-teardown.sh
+&& ./1-run.sh`. Wipe with `./3-teardown.sh --wipe-data`. Note: the Data
+Index history (Mgmt Console timeline of *completed* instances) lives in
+its own dev-services container and *does* reset on each teardown.
 
 ### Key URLs the analyst needs
 
@@ -327,6 +341,49 @@ too. **No restart.** Hot reload.
 rename a task, download, import, see it live. The diagram really is the
 source of truth — both for the people who design the process and for the
 service that runs it."*
+
+---
+
+## Bonus scene — "Deploy this to a real cluster from the editor" (Dev Deployments)
+
+> Skip if you ran with `./1-run.sh --no-devdeploy`.
+
+🖱  Switch to the **BPMN Editor** tab (http://localhost:8480/).
+
+🖱  In the top toolbar, click **Dev Deployments ▾** → **Connect to an account…**
+
+🖱  Choose **Kubernetes** in the provider list.
+
+When the wizard opens, ignore the multi-step "Configure a new local
+Kubernetes cluster" instructions — `./1-run.sh` already did all of that
+for you. Skip to **step 2 — Set connection info**, paste the three
+values printed at the end of the run (also saved to
+`logs/devdeploy-wizard.txt`):
+
+- **Namespace:** `local-kie-sandbox-dev-deployments`
+- **Kubernetes API URL:** `http://localhost/kube-apiserver`
+- **Token:** *(printed by `./1-run.sh`; full value in
+  `logs/devdeploy-wizard.txt`)*
+
+🖱  Click **Connect**. The editor confirms the connection.
+
+🖱  With `approval.bpmn` open in the editor, click **Dev Deployments ▾**
+→ **Deploy**. The editor packages the BPMN into a Quarkus image,
+applies a Deployment + Service + Ingress to the kind cluster, and
+returns a URL.
+
+👀 In a few minutes a live Quarkus pod runs the same BPMN we've been
+editing — but inside Kubernetes, not on your laptop directly.
+
+💬  *"That's the same artefact — same `approval.bpmn` we've been
+editing — going from analyst-laptop to a Kubernetes cluster with no
+build step on my side. The editor packaged it; the cluster runs it.
+For a real environment swap kind for OpenShift and the flow is
+identical."*
+
+💡 *(if asked)* This is what the "OpenShift" provider in the same
+wizard targets, with an OAuth flow instead of a paste-token. Same
+mechanism.
 
 ---
 
