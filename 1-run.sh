@@ -202,16 +202,18 @@ DEVDEPLOY_API_URL=""
 DEVDEPLOY_TOKEN=""
 
 if (( SKIP_DEVDEPLOY == 0 )); then
-  # Port 80 is required by the kind cluster's ingress port-mapping.
-  if pids=$(lsof -ti:80 2>/dev/null) && [[ -n "$pids" ]]; then
-    warn "Port 80 is in use by PID(s): $pids — Dev Deployments needs it for the kind ingress."
-    warn "Free port 80 and re-run, or skip with: ./1-run.sh --no-devdeploy"
-    die "Aborting Dev Deployments setup."
-  fi
-
   if kind get clusters 2>/dev/null | grep -qx "$KIND_CLUSTER_NAME"; then
     say "kind cluster '$KIND_CLUSTER_NAME' already exists — reusing."
+    # Cluster's own control-plane container holds ports 80/443; that's expected.
   else
+    # Port 80 is required by the kind cluster's ingress port-mapping. Only
+    # checked when we're about to *create* the cluster — if the cluster is
+    # already up, port 80 is legitimately ours.
+    if pids=$(lsof -ti:80 2>/dev/null) && [[ -n "$pids" ]]; then
+      warn "Port 80 is in use by PID(s): $pids — Dev Deployments needs it for the kind ingress."
+      warn "Free port 80 and re-run, or skip with: ./1-run.sh --no-devdeploy"
+      die "Aborting Dev Deployments setup."
+    fi
     say "Creating kind cluster '$KIND_CLUSTER_NAME' (~60-90s)…"
     KIND_CFG="$LOG_DIR/kind-cluster-config.yaml"
     curl -sf "http://localhost:8480/dev-deployments/kubernetes/cluster-config/kind-cluster-config.yaml" -o "$KIND_CFG" \
