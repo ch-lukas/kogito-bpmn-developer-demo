@@ -83,9 +83,10 @@ else
   ok "$DI_IMG:10.1 already present"
 fi
 
-# Pull console images up-front for cleaner first-run timing
+# Pull console + editor images up-front for cleaner first-run timing
 docker pull apache/incubator-kie-kogito-management-console:10.1.0 >/dev/null 2>&1 &
 docker pull apache/incubator-kie-kogito-task-console:main         >/dev/null 2>&1 &
+docker pull apache/incubator-kie-sandbox-webapp:10.1.0            >/dev/null 2>&1 &
 wait
 
 # -----------------------------------------------------------------------------
@@ -159,12 +160,21 @@ docker run -d --name kogito-task-console -p 8380:8080 \
 wait_http "http://localhost:8380/" 90 "Task Console"
 ok "Task Console up on :8380"
 
+say "Starting BPMN Editor (local sandbox.kie.org) on :8480"
+docker rm -f kogito-bpmn-editor >/dev/null 2>&1 || true
+docker run -d --name kogito-bpmn-editor --platform linux/amd64 -p 8480:8080 \
+  apache/incubator-kie-sandbox-webapp:10.1.0 >/dev/null
+wait_http "http://localhost:8480/" 90 "BPMN Editor"
+ok "BPMN Editor up on :8480"
+
 # -----------------------------------------------------------------------------
 # Final URLs
 # -----------------------------------------------------------------------------
 echo
 say "Demo is live. Open these in your browser:"
 echo
+printf "  ${GREEN}%-26s${RESET} %s\n" "BPMN Editor (Sandbox)" "http://localhost:8480"
+printf "  ${YELLOW}%-26s${RESET} %s\n" "  → Open file from URL"  "http://localhost:8090/bpmn/approval.bpmn"
 printf "  ${GREEN}%-26s${RESET} %s\n" "Management Console"  "http://localhost:8280"
 printf "  ${YELLOW}%-26s${RESET} %s\n" "  → Connect with"     "alias=local   URL=http://localhost:8090"
 printf "  ${GREEN}%-26s${RESET} %s\n" "Task Console"        "http://localhost:8380"
@@ -188,6 +198,7 @@ if [[ " $* " != *" --no-open "* ]]; then
   if [[ -n "$opener" ]]; then
     say "Opening browser tabs…"
     for url in \
+      "http://localhost:8480/" \
       "http://localhost:8280/" \
       "http://localhost:8080/q/swagger-ui/" \
       "http://localhost:8080/q/dev-ui/"; do

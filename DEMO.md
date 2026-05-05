@@ -20,8 +20,20 @@ mixed audience (i.e. solution architects, process automation, workflow engineers
 ```
 
 It checks prereqs, clears any previous state, starts the Quarkus runtime,
-CORS proxy, Management Console, Task Console, and auto-opens three
-browser tabs. Wait for "Demo is live." and the tabs to appear.
+CORS proxy, Management Console, Task Console, **BPMN Editor (your local
+sandbox.kie.org)**, and auto-opens four browser tabs. Wait for "Demo is
+live." and the tabs to appear.
+
+### Key URLs the analyst needs
+
+| Tab | URL |
+|---|---|
+| **BPMN Editor** (local Sandbox) | **http://localhost:8480** |
+| BPMN file to import into the editor | http://localhost:8090/bpmn/approval.bpmn |
+| Management Console | http://localhost:8280 |
+| Swagger UI | http://localhost:8080/q/swagger-ui/ |
+
+The full list (incl. Task Console, Dev UI, Data Index) is in [Cheat sheet — URLs](#cheat-sheet--urls) at the bottom.
 
 ### One-time: connect the Management Console to the runtime
 
@@ -49,17 +61,27 @@ on the next `./1-run.sh`, you'll skip straight to it.
 
 ### Browser tabs (auto-opened by `1-run.sh`)
 
-1. **http://localhost:8280/** — KIE Management Console (the headline visual)
-2. **http://localhost:8080/q/swagger-ui/** — auto-generated REST surface
-3. **http://localhost:8080/q/dev-ui/** — Quarkus Dev UI (extensions, dev tools)
+1. **http://localhost:8480/** — BPMN Editor (your local copy of sandbox.kie.org). **Home base for the analyst.**
+2. **http://localhost:8280/** — KIE Management Console (live process state — the headline runtime visual)
+3. **http://localhost:8080/q/swagger-ui/** — auto-generated REST surface
+4. **http://localhost:8080/q/dev-ui/** — Quarkus Dev UI (extensions, dev tools)
 
 The Task Console at **http://localhost:8380/** is also running but not
 auto-opened — the Management Console covers tasks too. Open the Task
 Console manually if you want to demo the end-user inbox UI separately.
 
-You'll likely also want **VS Code** open on
-`workflow/src/main/resources/org/acme/travels/approval.bpmn` for Scene 1
-and Scene 6 (the BPMN editor).
+> No IDE required for this demo. The BPMN Editor at :8480 is the same
+> visual modeller that powers sandbox.kie.org, served entirely from your
+> laptop.
+
+### Heads-up: skip the Sandbox's "Log In" prompts
+
+On first load the BPMN Editor may offer to **Connect to GitHub /
+Bitbucket** or **Connect to OpenShift / Kubernetes**. Those are *optional*
+integrations for importing from a Git repo or deploying to a cluster —
+**this demo uses neither**. Dismiss / close the prompt; the editor itself
+needs no login. The analyst flow is purely: Import from URL → edit →
+Download → `./4-import.sh`.
 
 ### Sanity checks
 ```bash
@@ -75,7 +97,7 @@ curl -sI localhost:8280 | head -1                           # → 200 OK
 
 ---
 
-## Scene 1 — "A simple Claims process?" (the BPMN model in VS Code)
+## Scene 1 — "A simple Claims process?" (the BPMN model in your local Sandbox)
 
 💬  *"Picture a typical claims approval: a customer submits a claim, a
 front-line analyst gives it a first look, and then a senior analyst signs it
@@ -91,7 +113,19 @@ process we're going to model — four steps end-to-end:*
 see in a moment that the engine enforces 'different people' for us, no
 application code required."*
 
-🖱  Switch to **VS Code**, open `workflow/src/main/resources/org/acme/travels/approval.bpmn`. The graphical editor renders.
+🖱  Switch to the **BPMN Editor** tab (http://localhost:8480/).
+
+💬  *"This is sandbox.kie.org — but running entirely on my laptop. Same
+visual modeller a business analyst uses in the browser, no install, no
+account. I'm going to import our claims process from the running project."*
+
+🖱  On the editor home, click **Import** (or use the import card). Paste the URL printed by `1-run.sh`:
+
+```
+http://localhost:8090/bpmn/approval.bpmn
+```
+
+🖱  Click **Import**. The graphical editor renders the diagram.
 
 ![Approval process](docs/screenshots/02-vscode.png)
 
@@ -112,7 +146,8 @@ you need to read this diagram."*
 
 💬  *"Notice this is just a graphical representation — under the hood it's
 XML. But you and a business analyst can read this together, and what you see
-is what runs in production."*
+is what runs in production. There's no separate 'business view' and
+'engineering view' — same file, same tool."*
 
 💡 *(if asked)* The file is `.bpmn` — pure BPMN 2.0 standard. The flow itself
 is portable; the data-mapping and assignment annotations used here are
@@ -259,14 +294,28 @@ no application code needed."*
 
 ---
 
-## Scene 6 — "What changes when I edit the model?"
+## Scene 6 — "What changes when an analyst edits the model?"
 
-🖱  Switch to **VS Code** → `approval.bpmn`.
+🖱  Switch back to the **BPMN Editor** tab (http://localhost:8480/) — the
+diagram you imported in Scene 1 is still there.
 
-🖱  Click the **First Line Approval** task → in properties, change its name
-to "**Compliance Check**". Save.
+🖱  Click the **First Line Approval** task → in the properties panel on the
+right, rename it to "**Compliance Check**".
 
-🖱  Run `./2-demo.sh` again, or POST another `/approvals` via Swagger UI.
+🖱  In the editor toolbar, click **Download** (or the kebab menu →
+Download). The file lands in your `~/Downloads` folder as `approval.bpmn`.
+
+🖱  In a terminal, run:
+
+```bash
+./4-import.sh
+```
+
+That copies the freshly downloaded file over
+`workflow/src/main/resources/org/acme/travels/approval.bpmn`. Quarkus dev
+mode picks the change up on the next request — no restart.
+
+🖱  POST another `/approvals` via Swagger UI (or run `./2-demo.sh`).
 
 🖱  Switch to Management Console → Process Instances → click the new row.
 
@@ -274,9 +323,10 @@ to "**Compliance Check**". Save.
 instead of `First Line Approval`, and the Tasks inbox shows the new name
 too. **No restart.** Hot reload.
 
-💬  *"That's the developer loop: business analyst edits the model, save,
-new process instances pick it up immediately. In production you'd version
-the model alongside your service."*
+💬  *"That's the analyst loop, end-to-end in a browser: open the model,
+rename a task, download, import, see it live. The diagram really is the
+source of truth — both for the people who design the process and for the
+service that runs it."*
 
 ---
 
@@ -308,7 +358,7 @@ the engine and the four-eye principle becomes a real audit trail."*
 
 | Question | Where to take it |
 |---|---|
-| "Can a non-developer edit this?" | VS Code's BPMN editor — same file format opens at https://sandbox.kie.org for browser-only authoring. |
+| "Can a non-developer edit this?" | Already shown in Scene 6 — the BPMN Editor on :8480 *is* sandbox.kie.org running locally. No IDE involved. |
 | "How does this differ from jBPM?" | Kogito IS the cloud-native evolution of jBPM. Same engine, packaged for Quarkus / Spring / native. |
 | "Decision rules?" | Same toolchain edits DMN files (Decision Model and Notation) alongside BPMN. |
 | "OpenShift?" | Kogito Operator + standard Quarkus container build. |
@@ -334,6 +384,8 @@ git checkout -- workflow/src/main/resources/org/acme/travels/approval.bpmn
 
 | Purpose | URL |
 |---|---|
+| BPMN Editor (local sandbox.kie.org) | http://localhost:8480 |
+| BPMN file the editor imports | http://localhost:8090/bpmn/approval.bpmn |
 | KIE Management Console | http://localhost:8280 |
 | Task Console (optional) | http://localhost:8380 |
 | Quarkus Swagger UI | http://localhost:8080/q/swagger-ui/ |
@@ -361,25 +413,28 @@ curl -s -X POST -H 'Content-Type: application/json' \
 ## Architecture (what's actually running)
 
 ```
-┌────────────────────────────────────────────────────────────┐
-│                    Browser tabs                            │
-│  ┌─────────┐ ┌────────────┐ ┌───────────┐ ┌────────────┐   │
-│  │ VS Code │ │ Mgmt :8280 │ │ Task:8380 │ │ Swagger    │   │
-│  └─────────┘ └─────┬──────┘ └─────┬─────┘ └──────┬─────┘   │
-└────────────────────┼──────────────┼──────────────┼─────────┘
-                     │              │              │
-                     ▼              ▼              ▼
-             ┌────────────────────────────┐  ┌───────────┐
-             │ CORS proxy :8090           │  │ Direct to │
-             │   /graphql → :8180         │  │  :8080    │
-             │   *        → :8080         │  └─────┬─────┘
-             └──┬───────────────────┬─────┘        │
-                │                   │              │
-                ▼                   ▼              ▼
-         ┌──────────────┐    ┌────────────────────────┐
-         │ Data Index   │    │ Quarkus runtime :8080  │
-         │  :8180       │◀───│  (Kogito + jBPM)       │
-         │  (GraphQL)   │    │  - approval.bpmn       │
-         └──────────────┘    │  - REST + add-ons      │
-                             └────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│                          Browser tabs                                │
+│  ┌──────────────┐ ┌────────────┐ ┌───────────┐ ┌────────────┐        │
+│  │ BPMN Editor  │ │ Mgmt :8280 │ │ Task:8380 │ │ Swagger    │        │
+│  │ (Sandbox)    │ └─────┬──────┘ └─────┬─────┘ └──────┬─────┘        │
+│  │   :8480      │       │              │              │              │
+│  └──────┬───────┘       │              │              │              │
+└─────────┼───────────────┼──────────────┼──────────────┼──────────────┘
+          │ imports BPMN  │              │              │
+          ▼               ▼              ▼              ▼
+   ┌────────────────────────────────────────┐   ┌───────────┐
+   │ CORS proxy :8090                       │   │ Direct to │
+   │   /bpmn/*  → workflow/.../approval.bpmn│   │  :8080    │
+   │   /graphql → :8180                     │   └─────┬─────┘
+   │   *        → :8080                     │         │
+   └──┬───────────────────┬─────────────────┘         │
+      │                   │                           │
+      ▼                   ▼                           ▼
+ ┌──────────────┐    ┌────────────────────────┐
+ │ Data Index   │    │ Quarkus runtime :8080  │
+ │  :8180       │◀───│  (Kogito + jBPM)       │
+ │  (GraphQL)   │    │  - approval.bpmn       │
+ └──────────────┘    │  - REST + add-ons      │
+                     └────────────────────────┘
 ```

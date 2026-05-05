@@ -12,11 +12,26 @@
 //   node cors-proxy.js
 
 const http = require('node:http');
+const fs = require('node:fs');
+const path = require('node:path');
 const { URL } = require('node:url');
 
 const PORT = Number(process.env.PORT || 8090);
 const RUNTIME = new URL(process.env.RUNTIME || 'http://localhost:8080');
 const DATA_INDEX = new URL(process.env.DATA_INDEX || 'http://localhost:8180');
+
+// Static file the BPMN Editor (local Sandbox on :8480) imports via URL.
+// Served from the live source tree so analysts always pull the current file.
+const BPMN_DIR = path.join(
+  __dirname,
+  'workflow',
+  'src',
+  'main',
+  'resources',
+  'org',
+  'acme',
+  'travels',
+);
 
 function pickTarget(reqUrl) {
   // Anything graphql-ish goes to data-index; everything else to the runtime.
@@ -43,6 +58,27 @@ const server = http.createServer((req, res) => {
   if (req.method === 'OPTIONS') {
     res.writeHead(204, corsHeaders(req));
     res.end();
+    return;
+  }
+
+  // /bpmn/<filename>.bpmn — serve from workflow source tree so the BPMN
+  // Editor on :8480 can import the live file. Path-traversal-guarded.
+  const bpmnMatch = req.url.match(/^\/bpmn\/([A-Za-z0-9_-]+\.bpmn)(?:\?.*)?$/);
+  if (bpmnMatch) {
+    const filePath = path.join(BPMN_DIR, bpmnMatch[1]);
+    fs.readFile(filePath, (err, data) => {
+      if (err) {
+        res.writeHead(404, { 'Content-Type': 'text/plain', ...corsHeaders(req) });
+        res.end(`Not found: ${bpmnMatch[1]}`);
+        return;
+      }
+      res.writeHead(200, {
+        'Content-Type': 'application/xml; charset=utf-8',
+        'Cache-Control': 'no-store',
+        ...corsHeaders(req),
+      });
+      res.end(data);
+    });
     return;
   }
 
@@ -80,5 +116,6 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, () => {
   console.log(`[cors-proxy] listening on http://localhost:${PORT}`);
   console.log(`[cors-proxy]   /graphql*  → ${DATA_INDEX.origin}`);
+  console.log(`[cors-proxy]   /bpmn/*    → ${BPMN_DIR}`);
   console.log(`[cors-proxy]   everything else → ${RUNTIME.origin}`);
 });

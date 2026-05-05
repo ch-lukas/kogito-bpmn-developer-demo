@@ -8,8 +8,8 @@ ok()  { printf "${GREEN}✓ %s${RESET}\n" "$*"; }
 
 say "Stopping demo services…"
 
-# Console containers
-for c in kogito-mgmt-console kogito-task-console; do
+# Console + editor containers
+for c in kogito-mgmt-console kogito-task-console kogito-bpmn-editor; do
   if docker rm -f "$c" >/dev/null 2>&1; then ok "removed $c container"; fi
 done
 

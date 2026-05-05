@@ -1,9 +1,11 @@
-# Kogito BPMN for Developers — a 10-minute live demo
+# Kogito BPMN for Analysts — a 10-minute live demo
 
-> **The pitch:** open a business-process diagram in VS Code, run one command,
-> and you have a working REST service, a process-state dashboard, and a
-> task inbox — all driven by the diagram itself. Edit the diagram, save,
-> see it live. No glue code.
+> **The pitch:** open http://localhost:8480 — that's a local copy of
+> [sandbox.kie.org](https://sandbox.kie.org) running on your laptop, the
+> visual BPMN editor where you create and edit processes. Run one command,
+> and the same diagram is also a working REST service, a process-state
+> dashboard, and a task inbox. Edit the diagram in the browser, hot-import,
+> see it live. No IDE, no glue code.
 
 ![Headline screenshot — Management Console showing the BPMN diagram with a live execution token](docs/screenshots/01-hero.png)
 
@@ -16,12 +18,13 @@ architecture.
 
 ## What you'll see
 
-- A real **BPMN 2.0 diagram** modelled in VS Code becomes an executable service.
+- A real **BPMN 2.0 diagram** authored in your browser (a local **KIE Sandbox**, the same UI as sandbox.kie.org) becomes an executable service.
 - The **Apache KIE / jBPM** engine code-generates a REST API around the diagram at build time.
 - A **Management Console** shows live process instances with the diagram highlighting where each instance is.
 - A **Task Console** delivers an inbox for human approvals.
 - The model encodes a real compliance pattern (the **four-eye principle** —
   two different managers must approve) and the engine enforces it.
+- Analysts edit the diagram in the browser, click Download, run `./4-import.sh`, and Quarkus hot-reloads — no IDE, no restart.
 
 ## Why it matters (for a non-technical audience)
 
@@ -42,22 +45,27 @@ becomes an inspectable, observable, auditable event in a real system.
 | Maven | 3.9+ | `brew install maven` | `sudo apt install maven` | `winget install Apache.Maven` |
 | Node | 18+ | `brew install node` | `sudo apt install nodejs npm` | `winget install OpenJS.NodeJS.LTS` |
 
+> **For analysts who never touch the terminal after `./1-run.sh`** — JDK and Maven are needed *once*, so the workflow's REST endpoints can be regenerated from the BPMN diagram on startup. Everything after that happens in the browser.
+
 `1-run.sh` checks all of these and explains anything missing. On Windows,
 run the script from **WSL2** — the orchestration relies on a POSIX shell.
 
-### Optional but strongly recommended: VS Code + the Apache KIE BPMN editor
+### BPMN authoring — included, no IDE required
 
-The demo *runs* without an IDE, but for the headline visual of "edit the
-diagram, save, see it live" you'll want a graphical BPMN editor. The
-**[Apache KIE Kogito Bundle](https://marketplace.visualstudio.com/items?itemName=kie-group.vscode-extension-kogito-bundle)**
-extension turns any `.bpmn` / `.bpmn2` / `.dmn` file in your editor into a
-graphical canvas with a properties panel — same engine that powers
-[sandbox.kie.org](https://sandbox.kie.org).
+The visual BPMN editor — a local, self-hosted copy of
+[sandbox.kie.org](https://sandbox.kie.org) — starts as part of `./1-run.sh`
+and opens automatically at **http://localhost:8480**. Same UI, same engine,
+same shortcuts as the public Sandbox; just running on your laptop with no
+internet round-trip and no account.
 
-| | macOS | Linux | Windows |
-|---|---|---|---|
-| **VS Code** | `brew install --cask visual-studio-code` | `sudo snap install code --classic` | `winget install Microsoft.VisualStudioCode` |
-| **KIE extension** | `code --install-extension kie-group.vscode-extension-kogito-bundle` (any platform — same command) | | |
+To open the project's BPMN file in the editor, click **Import** on the
+editor home and paste the URL printed by `1-run.sh`:
+`http://localhost:8090/bpmn/approval.bpmn`. The CORS proxy serves it
+straight from the workflow source tree.
+
+To save edits back: click **Download** in the editor toolbar, then run
+`./4-import.sh`. Quarkus dev mode hot-reloads on the next request — no
+restart.
 
 ### Setup — one command
 
@@ -70,7 +78,7 @@ cd kogito-bpmn-developer-demo
 `1-run.sh` will:
 1. Verify prerequisites (and auto-set `JAVA_HOME` to your JDK 17 on macOS).
 2. Pull / retag the required Docker images (works around an upstream tag mismatch).
-3. Start the Quarkus workflow, the CORS proxy, and both consoles.
+3. Start the Quarkus workflow, the CORS proxy, both consoles, and the local **BPMN Editor (Sandbox)**.
 4. Print the URLs to open.
 
 #### Running `1-run.sh` on each OS
@@ -82,18 +90,20 @@ cd kogito-bpmn-developer-demo
 | **Windows (WSL2)** | Open **Ubuntu** (or any WSL2 distro), `cd` into the cloned repo, run `./1-run.sh` | Install Docker Desktop on Windows and enable its WSL2 integration. Inside WSL2, `sudo apt install lsof procps` if missing. |
 | **Windows (native PowerShell / cmd)** | **Not supported.** Use WSL2. | The script relies on bash, `lsof`, `pgrep`, and POSIX nohup; native Windows shells don't have these. |
 
-If `./1-run.sh` reports `permission denied`, run `chmod +x 1-run.sh 2-demo.sh 3-teardown.sh` once after cloning.
+If `./1-run.sh` reports `permission denied`, run `chmod +x 1-run.sh 2-demo.sh 3-teardown.sh 4-import.sh` once after cloning.
 
 You'll see something like this:
 
 ```
 Demo is live. Open these in your browser:
 
-  Management Console    http://localhost:8280  (connect with: local / http://localhost:8090)
-  Task Console          http://localhost:8380
-  Swagger UI            http://localhost:8080/q/swagger-ui/
-  Quarkus Dev UI        http://localhost:8080/q/dev-ui/
-  Data Index GraphiQL   http://localhost:8180/graphiql/
+  BPMN Editor (Sandbox)  http://localhost:8480
+    → Open file from URL  http://localhost:8090/bpmn/approval.bpmn
+  Management Console     http://localhost:8280  (connect with: local / http://localhost:8090)
+  Task Console           http://localhost:8380
+  Swagger UI             http://localhost:8080/q/swagger-ui/
+  Quarkus Dev UI         http://localhost:8080/q/dev-ui/
+  Data Index GraphiQL    http://localhost:8180/graphiql/
 ```
 
 When you're done: `./3-teardown.sh`.
@@ -114,27 +124,30 @@ four-eye principle in action, and hot-reload of the model during the demo.
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                       Browser tabs                           │
-│  ┌─────────┐ ┌────────────┐ ┌──────────┐ ┌──────────────┐    │
-│  │ VS Code │ │ Mgmt :8280 │ │ Task:8380│ │ Swagger:8080 │    │
-│  └─────────┘ └─────┬──────┘ └────┬─────┘ └──────┬───────┘    │
-└────────────────────┼─────────────┼──────────────┼────────────┘
-                     │             │              │
-                     ▼             ▼              ▼
-           ┌─────────────────────────────┐   ┌───────────┐
-           │ CORS proxy :8090            │   │Direct REST│
-           │   /graphql → :8180          │   └─────┬─────┘
-           │   *        → :8080          │         │
-           └──┬──────────────────────┬───┘         │
-              ▼                      ▼             ▼
-      ┌──────────────┐       ┌──────────────────────────┐
-      │ Data Index   │       │  Quarkus workflow :8080   │
-      │  :8180       │◀──────│  (Kogito + jBPM)         │
-      │  (GraphQL)   │       │   • approval.bpmn        │
-      └──────────────┘       │   • Auto-generated REST  │
-                             │   • Process management   │
-                             └──────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│                          Browser tabs                                │
+│  ┌──────────────┐ ┌────────────┐ ┌──────────┐ ┌──────────────┐       │
+│  │ BPMN Editor  │ │ Mgmt :8280 │ │ Task:8380│ │ Swagger:8080 │       │
+│  │ (Sandbox)    │ └─────┬──────┘ └────┬─────┘ └──────┬───────┘       │
+│  │   :8480      │       │             │              │               │
+│  └──────┬───────┘       │             │              │               │
+└─────────┼───────────────┼─────────────┼──────────────┼───────────────┘
+          │ imports BPMN  │             │              │
+          ▼               ▼             ▼              ▼
+   ┌────────────────────────────────────────┐   ┌───────────┐
+   │ CORS proxy :8090                       │   │Direct REST│
+   │   /bpmn/*  → workflow/.../approval.bpmn│   └─────┬─────┘
+   │   /graphql → :8180                     │         │
+   │   *        → :8080                     │         │
+   └──┬───────────────────┬─────────────────┘         │
+      ▼                   ▼                           ▼
+ ┌──────────────┐    ┌──────────────────────────┐
+ │ Data Index   │    │  Quarkus workflow :8080  │
+ │  :8180       │◀───│  (Kogito + jBPM)         │
+ │  (GraphQL)   │    │   • approval.bpmn        │
+ └──────────────┘    │   • Auto-generated REST  │
+                     │   • Process management   │
+                     └──────────────────────────┘
 ```
 
 ### Why the CORS proxy?
@@ -156,9 +169,11 @@ from Apache KIE. The additions are:
 - **`workflow/pom.xml`** — three add-ons the Management Console needs (`process-management`, `process-svg`, `source-files`).
 - **`workflow/src/main/resources/application.properties`** — CORS config, dev services switches, and `kogito.service.url` pointing at the proxy so the data-index advertises the right URL to the console.
 - **`workflow/src/main/java/org/acme/travels/RootResource.java`** — JAX-RS endpoint at `/` so the console's auth probe gets a 200 with CORS headers.
-- **`cors-proxy.js`** — the path-routed CORS injector described above.
+- **`cors-proxy.js`** — the path-routed CORS injector described above, plus a `/bpmn/*` route that serves the live BPMN file to the local Sandbox editor.
+- **Local KIE Sandbox container** (`apache/incubator-kie-sandbox-webapp:10.1.0` on port 8480) — visual BPMN editor, started by `1-run.sh`.
 - **`1-run.sh` / `3-teardown.sh`** — orchestration.
 - **`2-demo.sh`** — end-to-end driver.
+- **`4-import.sh`** — copies an edited `approval.bpmn` from `~/Downloads` over the project file so Quarkus hot-reloads.
 - **`DEMO.md`** — presenter script.
 
 ## Reference links
