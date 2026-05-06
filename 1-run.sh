@@ -49,9 +49,17 @@ die()  { printf "${RED}✗ %s${RESET}\n" "$*" >&2; exit 1; }
 # alacritty, gnome-terminal, modern macOS Terminal.app. Falls back to
 # plain text on older terminals (escape codes are silently ignored).
 #   url_link  http://localhost:8480
-#   file_link /abs/path/to/file.txt   → renders as "/abs/path/to/file.txt"
+#   file_link /abs/path/to/file.txt   →  "/logs/file.txt"
+#                                         ^^^^^^^^^^^^^^ repo-relative for
+#                                                        screenshot-friendliness;
+#                                                        click still opens the
+#                                                        absolute path.
 url_link()  { printf '\e]8;;%s\e\\%s\e]8;;\e\\' "$1" "${2:-$1}"; }
-file_link() { printf '"\e]8;;file://%s\e\\%s\e]8;;\e\\"' "$1" "$1"; }
+file_link() {
+  local abs="$1" display="${1#$REPO_ROOT}"
+  [[ -z "$display" || "$display" == "$abs" ]] && display="$abs"
+  printf '"\e]8;;file://%s\e\\%s\e]8;;\e\\"' "$abs" "$display"
+}
 
 # -----------------------------------------------------------------------------
 # Prerequisite checks
