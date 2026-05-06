@@ -176,11 +176,38 @@ const server = http.createServer((req, res) => {
     req.url.match(/^\/dev-deployment-([A-Za-z0-9_-]+)(\/.*)?(?:\?.*)?$/);
   // Bare endpoint URL (e.g. http://localhost:8090/dev-deployment-<id>) is what
   // the Mgmt Console links to. The deployed Quarkus app serves nothing at /,
-  // so redirect to swagger-ui — the natural landing page for poking at the API.
+  // so redirect to swagger-ui anchored on the first process — Kogito exposes
+  // the process list at /management/processes. Falls back to swagger root if
+  // the lookup fails.
   if (passThroughMatch && (!passThroughMatch[2] || passThroughMatch[2] === '/')) {
-    const target = `/dev-deployment-${passThroughMatch[1]}/q/swagger-ui/`;
-    res.writeHead(302, { Location: target, ...corsHeaders(req) });
-    res.end();
+    const deployId = passThroughMatch[1];
+    const base = `/dev-deployment-${deployId}`;
+    const lookup = http.request({
+      host: CLUSTER_INGRESS.hostname,
+      port: CLUSTER_INGRESS.port || 80,
+      path: `${base}/management/processes`,
+      method: 'GET',
+      headers: { host: CLUSTER_INGRESS.host, accept: 'application/json' },
+    }, (lookupRes) => {
+      let body = '';
+      lookupRes.on('data', (c) => { body += c; });
+      lookupRes.on('end', () => {
+        let target = `${base}/q/swagger-ui/`;
+        try {
+          const ids = JSON.parse(body);
+          if (Array.isArray(ids) && ids.length > 0) {
+            target = `${base}/q/swagger-ui/#/${encodeURIComponent(ids[0])}`;
+          }
+        } catch { /* fall through to bare swagger-ui */ }
+        res.writeHead(302, { Location: target, ...corsHeaders(req) });
+        res.end();
+      });
+    });
+    lookup.on('error', () => {
+      res.writeHead(302, { Location: `${base}/q/swagger-ui/`, ...corsHeaders(req) });
+      res.end();
+    });
+    lookup.end();
     return;
   }
   if (clusterMatch || passThroughMatch) {
