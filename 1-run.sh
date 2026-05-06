@@ -15,6 +15,16 @@
 
 set -euo pipefail
 
+# Belt-and-braces against bash job-control noise. The cors-proxy and
+# any other backgrounded job is meant to live past this script, so we:
+#   1. Disable monitor mode (set +m) — no "[1] Done"-style notifications
+#      from this shell.
+#   2. Filter "Terminated: 15" out of stderr — catches stragglers from
+#      a previous-version run whose subshell still emits notifications
+#      when 3-teardown.sh's pkill reaches it.
+set +m
+exec 2> >(grep -v 'Terminated: 15' >&2)
+
 REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
 LOG_DIR="$REPO_ROOT/logs"
 mkdir -p "$LOG_DIR"
