@@ -80,7 +80,11 @@ wait
 # rewrites for the cloud Mgmt Console + /viewer/<id>/<proc> read-only viewer)
 # -----------------------------------------------------------------------------
 say "Starting CORS proxy on :8090"
-( cd "$REPO_ROOT" && nohup node cors-proxy.js > "$LOG_DIR/cors-proxy.log" 2>&1 & )
+# `disown` after backgrounding so bash stops tracking the job — keeps
+# 9-teardown.sh's later pkill from printing "Terminated: 15" at the
+# top of the next ./1-run.sh.
+( cd "$REPO_ROOT" && nohup node cors-proxy.js > "$LOG_DIR/cors-proxy.log" 2>&1 ) &
+disown $! 2>/dev/null || true
 for ((i=0; i<20; i++)); do
   if curl -sf -o /dev/null "http://localhost:8090/bpmn/approval.bpmn" 2>/dev/null; then break; fi
   sleep 0.5
