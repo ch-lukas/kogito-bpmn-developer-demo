@@ -5,6 +5,9 @@
 //   /viewer/<deployId>/<processId>   → in-proxy read-only KIE BPMN viewer
 //   /bpmn/<file>.bpmn                → serve from samples/ (for the editor's import)
 //   /cluster/<deployId>/<rest>       → kind ingress at /dev-deployment-<deployId>/<rest>
+//   /dev-deployment-<deployId>/<rest> → kind ingress, path passed through unchanged
+//                                       (matches the URL the runtime advertises about
+//                                       itself, so the Mgmt Console's "endpoint" link works)
 //
 // All responses get CORS headers so the BPMN Editor (:8480) and Management
 // Console (:8281) can talk to anything served here from any origin.
@@ -165,9 +168,16 @@ const server = http.createServer((req, res) => {
   // and forward to the kind ingress on :80. Lets the Mgmt Console connect
   // to a Sandbox-deployed app via this proxy so CORS works the same as
   // for the BPMN Editor.
+  // Two shapes hit the same upstream:
+  //   /cluster/<id>/<rest>           → /dev-deployment-<id>/<rest>  (rewrite)
+  //   /dev-deployment-<id>/<rest>    → /dev-deployment-<id>/<rest>  (pass-through)
   const clusterMatch = req.url.match(/^\/cluster\/([A-Za-z0-9_-]+)(\/.*)?$/);
-  if (clusterMatch) {
-    const upstreamPath = `/dev-deployment-${clusterMatch[1]}${clusterMatch[2] || '/'}`;
+  const passThroughMatch = !clusterMatch &&
+    req.url.match(/^\/dev-deployment-([A-Za-z0-9_-]+)(\/.*)?(?:\?.*)?$/);
+  if (clusterMatch || passThroughMatch) {
+    const upstreamPath = clusterMatch
+      ? `/dev-deployment-${clusterMatch[1]}${clusterMatch[2] || '/'}`
+      : req.url;
     const upstream = http.request(
       {
         host: CLUSTER_INGRESS.hostname,
@@ -207,4 +217,5 @@ server.listen(PORT, () => {
   console.log(`[cors-proxy]   /viewer/<id>/<p>  → in-proxy KIE read-only editor`);
   console.log(`[cors-proxy]   /bpmn/*           → ${BPMN_DIR}`);
   console.log(`[cors-proxy]   /cluster/<id>/*   → ${CLUSTER_INGRESS.origin}/dev-deployment-<id>/*`);
+  console.log(`[cors-proxy]   /dev-deployment-<id>/* → ${CLUSTER_INGRESS.origin}/dev-deployment-<id>/* (pass-through)`);
 });
