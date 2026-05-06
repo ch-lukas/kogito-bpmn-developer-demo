@@ -301,7 +301,7 @@ stack:"*
 
 🖱  Stop everything:
 ```bash
-./3-teardown.sh
+./9-teardown.sh
 ```
 Default behaviour preserves the kind cluster, Docker images, and
 `./data` so the next run starts in ~30 s. Variants:

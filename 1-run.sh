@@ -11,7 +11,7 @@
 #   ./1-run.sh --no-open        # don't auto-open browser tabs
 #   ./1-run.sh --no-teardown    # don't clear previous state first
 #
-# Stop everything with: ./3-teardown.sh
+# Stop everything with: ./9-teardown.sh
 
 set -euo pipefail
 
@@ -60,13 +60,13 @@ ok "Docker daemon reachable"
 if [[ "${1:-}" == "--check" ]]; then ok "Prerequisite check complete."; exit 0; fi
 
 # -----------------------------------------------------------------------------
-# Clean previous run — idempotent. 3-teardown.sh is safe to invoke when nothing
+# Clean previous run — idempotent. 9-teardown.sh is safe to invoke when nothing
 # is running (it exits cleanly with no-ops). Skip with: ./1-run.sh --no-teardown
 # -----------------------------------------------------------------------------
 if [[ "${1:-}" != "--no-teardown" ]]; then
   say "Clearing any previous demo state…"
   # Default teardown preserves expensive things (kind cluster, images).
-  "$REPO_ROOT/3-teardown.sh" >/dev/null 2>&1 || true
+  "$REPO_ROOT/9-teardown.sh" >/dev/null 2>&1 || true
   ok "Previous state cleared"
 fi
 
@@ -196,7 +196,7 @@ if (( SKIP_DEVDEPLOY == 0 )); then
       fi
       sleep 1
     done
-    $api_ok || die "kube-apiserver didn't answer /healthz within 60s. Try: ./3-teardown.sh && ./1-run.sh"
+    $api_ok || die "kube-apiserver didn't answer /healthz within 60s. Try: ./9-teardown.sh && ./1-run.sh"
     ok "kube-apiserver healthy"
   else
     # Port 80 is required by the kind cluster's ingress port-mapping. Only
@@ -275,13 +275,20 @@ if (( SKIP_DEVDEPLOY == 0 )); then
   [[ -n "$DEVDEPLOY_TOKEN" ]] || warn "Could not read kie-sandbox-secret token. Try: kubectl -n default get secret kie-sandbox-secret -o jsonpath='{.data.token}' | base64 -d"
 
   DEVDEPLOY_API_URL="http://localhost/kube-apiserver"
+  # Each value on its own line so triple-click selects the whole thing
+  # cleanly when copy-pasting into the wizard.
   {
     echo "# Paste these into the BPMN Editor's 'Connect to Kubernetes' wizard."
     echo "# Editor: http://localhost:8480 → Dev Deployments → Connect to an account…"
     echo
-    echo "Namespace:           $DEVDEPLOY_NS"
-    echo "Kubernetes API URL:  $DEVDEPLOY_API_URL"
-    echo "Token:               $DEVDEPLOY_TOKEN"
+    echo "Namespace:"
+    echo "$DEVDEPLOY_NS"
+    echo
+    echo "Kubernetes API URL:"
+    echo "$DEVDEPLOY_API_URL"
+    echo
+    echo "Token:"
+    echo "$DEVDEPLOY_TOKEN"
   } > "$DEVDEPLOY_INFO_FILE"
   ok "Dev Deployments ready (wizard values saved to $DEVDEPLOY_INFO_FILE)"
 fi
@@ -336,5 +343,5 @@ fi
 
 say "Drive deployments:   ./5-exec.sh  (start, list, viewer, console, …)"
 say "Logs:                tail -f $LOG_DIR/cors-proxy.log"
-say "Stop everything:     ./3-teardown.sh        (preserves kind cluster + images)"
-say "Full cleanup:        ./3-teardown.sh --full (deletes cluster, images, tools)"
+say "Stop everything:     ./9-teardown.sh        (preserves kind cluster + images)"
+say "Full cleanup:        ./9-teardown.sh --full (deletes cluster, images, tools)"

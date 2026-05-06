@@ -89,7 +89,7 @@ cd kogito-bpmn-developer-demo
 | **Windows (PowerShell / cmd)** | **Not supported** — use WSL2 | bash + lsof + pgrep are required |
 
 If `./1-run.sh` reports `permission denied`:
-`chmod +x 1-run.sh 3-teardown.sh 5-exec.sh`.
+`chmod +x 1-run.sh 9-teardown.sh 5-exec.sh`.
 
 You'll see something like this at the end:
 
@@ -111,9 +111,9 @@ Demo is live. Open these in your browser:
 ### Cleanup
 
 ```bash
-./3-teardown.sh             # stop containers + cors-proxy; preserve cluster + images
-./3-teardown.sh --wipe-data # also delete ./data
-./3-teardown.sh --full      # nuke kind cluster, prune demo images, wipe data, brew-uninstall kind/kubectl
+./9-teardown.sh             # stop containers + cors-proxy; preserve cluster + images
+./9-teardown.sh --wipe-data # also delete ./data
+./9-teardown.sh --full      # nuke kind cluster, prune demo images, wipe data, brew-uninstall kind/kubectl
 ```
 
 Default is gentle on purpose so the next `./1-run.sh` starts in ~30 s
@@ -200,7 +200,7 @@ that:
 - **`cors-proxy.js`** — described above.
 - **`samples/approval.bpmn`** — starter BPMN; loaded into the editor
   via `http://localhost:8090/bpmn/approval.bpmn`.
-- **`1-run.sh` / `3-teardown.sh` / `5-exec.sh`** — orchestration and a
+- **`1-run.sh` / `9-teardown.sh` / `5-exec.sh`** — orchestration and a
   small CLI for driving deployments + opening tabs.
 - **`DEMO.md`** — presenter script.
 

@@ -6,9 +6,9 @@
 # things shared with other Kogito demos stay put.
 #
 # Usage:
-#   ./3-teardown.sh                 # stop containers + cors-proxy
-#   ./3-teardown.sh --wipe-data     # also delete ./data (persistence dir)
-#   ./3-teardown.sh --full          # nuke kind cluster + demo Docker
+#   ./9-teardown.sh                 # stop containers + cors-proxy
+#   ./9-teardown.sh --wipe-data     # also delete ./data (persistence dir)
+#   ./9-teardown.sh --full          # nuke kind cluster + demo Docker
 #                                   # images + ./data + uninstall kind &
 #                                   # kubectl (best-effort via brew)
 set -uo pipefail
