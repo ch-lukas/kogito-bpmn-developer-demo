@@ -378,7 +378,8 @@ if (( SKIP_DEVDEPLOY == 0 )); then
   if [[ -n "$DEVDEPLOY_TOKEN" ]]; then
     printf "  ${YELLOW}%-26s${RESET} %s\n" "      Namespace"          "$DEVDEPLOY_NS"
     printf "  ${YELLOW}%-26s${RESET} %s\n" "      Kubernetes API URL" "$DEVDEPLOY_API_URL"
-    printf "  ${YELLOW}%-26s${RESET} %s\n" "      Token"              "${DEVDEPLOY_TOKEN:0:20}…  (full: $(file_link "$DEVDEPLOY_INFO_FILE"))"
+    printf "  ${YELLOW}%-26s${RESET} %s\n" "      Token"              "$DEVDEPLOY_TOKEN"
+    printf "  ${YELLOW}%-26s${RESET} %s\n" "      URL"                "$(file_link "$DEVDEPLOY_INFO_FILE")"
   else
     printf "  ${YELLOW}%-26s${RESET} %s\n" ""                         "values in $(file_link "$DEVDEPLOY_INFO_FILE")"
   fi
