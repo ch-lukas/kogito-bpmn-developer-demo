@@ -33,6 +33,7 @@ if (( FULL == 1 )); then WIPE_DATA=1; fi
 DEMO_IMAGES=(
   "apache/incubator-kie-kogito-management-console:10.1.0"
   "apache/incubator-kie-sandbox-webapp:10.1.0"
+  "apache/incubator-kie-sandbox-extended-services:10.1.0"
   "apache/incubator-kie-sandbox-dev-deployment-quarkus-blank-app:10.1.0"
   "apache/incubator-kie-sandbox-dev-deployment-quarkus-blank-app:10.1.0-svg"
   "alpine/curl:latest"
@@ -46,7 +47,7 @@ DEMO_IMAGE_PATTERNS=(
 say "Stopping demo services…"
 
 # Containers (idempotent — silent if not present).
-for c in kogito-cors-proxy kogito-mgmt-console kogito-mgmt-console-cloud kogito-task-console kogito-bpmn-editor; do
+for c in kogito-cors-proxy kogito-mgmt-console kogito-mgmt-console-cloud kogito-task-console kogito-bpmn-editor kie-extended-services; do
   if docker rm -f "$c" >/dev/null 2>&1; then ok "removed $c container"; fi
 done
 

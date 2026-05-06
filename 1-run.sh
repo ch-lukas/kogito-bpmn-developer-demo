@@ -80,9 +80,11 @@ if [[ "${1:-}" != "--no-teardown" ]]; then
   ok "Previous state cleared"
 fi
 
-# Pull console + editor images up-front for cleaner first-run timing
-docker pull apache/incubator-kie-kogito-management-console:10.1.0 >/dev/null 2>&1 &
-docker pull apache/incubator-kie-sandbox-webapp:10.1.0            >/dev/null 2>&1 &
+# Pull console + editor + extended-services images up-front for
+# cleaner first-run timing.
+docker pull apache/incubator-kie-kogito-management-console:10.1.0      >/dev/null 2>&1 &
+docker pull apache/incubator-kie-sandbox-webapp:10.1.0                 >/dev/null 2>&1 &
+docker pull apache/incubator-kie-sandbox-extended-services:10.1.0      >/dev/null 2>&1 &
 wait
 
 # -----------------------------------------------------------------------------
@@ -140,6 +142,17 @@ if (( SKIP_DEVDEPLOY == 0 )); then
   wait_http "http://localhost:8281/" 90 "Management Console"
   ok "Management Console up on :8281"
 fi
+
+# Extended Services — the BPMN Editor probes localhost:21345/ping and
+# uses it for the Problems tab + DMN local execution. Without it, the
+# editor shows the "you need to use the Extended Services" tooltip.
+say "Starting Extended Services on :21345"
+docker rm -f kie-extended-services >/dev/null 2>&1 || true
+docker run -d --name kie-extended-services --platform linux/amd64 -p 21345:21345 \
+  -e EXTENDED_SERVICES_PORT=21345 \
+  apache/incubator-kie-sandbox-extended-services:10.1.0 >/dev/null
+wait_http "http://localhost:21345/ping" 90 "Extended Services"
+ok "Extended Services up on :21345"
 
 # Custom Dev Deployments base image: the upstream
 # apache/incubator-kie-sandbox-dev-deployment-quarkus-blank-app:10.1.0
