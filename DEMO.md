@@ -1,13 +1,18 @@
 # BPMN on Apache KIE / Kogito — Live Demo Script
 
 A click-by-click walkthrough designed to be delivered live in **~10 minutes** to a
-mixed audience (i.e. solution architects, process automation, workflow engineers). Visuals carry the story.
+mixed audience (solution architects, process automation, workflow engineers).
+Visuals carry the story.
 
 > **Format conventions**
 > 🖱  *Click / action you perform*
 > 💬 *What you say out loud*
 > 👀 *What the audience sees on screen*
 > 💡 *Optional aside if you have time / get a question*
+
+The story in one sentence: *the analyst draws a BPMN diagram in a browser, clicks Deploy,
+and a real Quarkus REST service running the diagram lights up inside a Kubernetes cluster
+— with a live dashboard showing where each running instance is parked.*
 
 ---
 
@@ -19,444 +24,263 @@ mixed audience (i.e. solution architects, process automation, workflow engineers
 ./1-run.sh
 ```
 
-It checks prereqs, clears any previous state, starts the Quarkus runtime,
-CORS proxy, Management Console, Task Console, **BPMN Editor (your local
-sandbox.kie.org)**, **a kind Kubernetes cluster wired up for the editor's
-Dev Deployments feature**, and auto-opens four browser tabs. Wait for
-"Demo is live." and the tabs to appear.
+It checks prereqs, clears any previous state, starts the CORS proxy, the
+**BPMN Editor (your local sandbox.kie.org)**, the **Management Console**,
+and a **kind Kubernetes cluster** wired up for the editor's Dev
+Deployments feature. Auto-opens two browser tabs.
 
 > First run is slow (~3–5 min) because of the kind cluster + ingress
-> controller. Subsequent runs reuse the cluster and start in ~90 s.
-> Skip the cluster entirely with `./1-run.sh --no-devdeploy` if you only
-> need the analyst loop.
-
-### Persistence
-
-Active process instances are stored in an embedded RocksDB at `./data/`
-on the host, so they survive Quarkus restarts and even `./3-teardown.sh
-&& ./1-run.sh`. Wipe with `./3-teardown.sh --wipe-data`. Note: the Data
-Index history (Mgmt Console timeline of *completed* instances) lives in
-its own dev-services container and *does* reset on each teardown.
+> controller + the patched Quarkus base image. Subsequent runs reuse
+> the cluster and start in ~30 s.
 
 ### Key URLs the analyst needs
 
 | Tab | URL |
 |---|---|
 | **BPMN Editor** (local Sandbox) | **http://localhost:8480** |
-| BPMN file to import into the editor | http://localhost:8090/bpmn/approval.bpmn |
-| Management Console | http://localhost:8281 (after deploying, run `./5-exec.sh console` for the connect URL) |
+| Sample BPMN to import | http://localhost:8090/bpmn/approval.bpmn |
+| **Management Console** | **http://localhost:8281** (run `./5-exec.sh console` after first deploy for the connect URL) |
 | Cloud-deployed app's Swagger UI | run `./5-exec.sh swagger` |
 
-The full list is in [Cheat sheet — URLs](#cheat-sheet--urls) at the bottom.
-
-### One-time: connect the Management Console to the runtime
-
-The first time you load http://localhost:8280/ in a fresh browser profile,
-you'll see a **"Welcome to Apache KIE™ Management Console"** screen with a
-**+ Connect to a runtime…** button. The console stores connections in
-browser localStorage, so you only do this **once per browser profile**.
-
-🖱  Click **+ Connect to a runtime…**
-
-In the dialog:
-- **Alias:** `local`
-- **URL:** `http://localhost:8090`
-- Leave **Force login prompt** unchecked (the local runtime is unsecured —
-  the proxy answers the auth probes for it).
-- Ignore **Advanced OpenID Connect settings**.
-
-🖱  Click **Connect**.
-
-You should land on the Process Instances page. The connection persists —
-on the next `./1-run.sh`, you'll skip straight to it.
-
-> If you ever need to reconnect (e.g. you cleared cookies), come back to
-> http://localhost:8280/ and the same dialog appears.
-
-### Browser tabs (auto-opened by `1-run.sh`)
-
-1. **http://localhost:8480/** — BPMN Editor (your local copy of sandbox.kie.org). **Home base for the analyst.**
-2. **http://localhost:8280/** — KIE Management Console (live process state — the headline runtime visual)
-3. **http://localhost:8080/q/swagger-ui/** — auto-generated REST surface
-4. **http://localhost:8080/q/dev-ui/** — Quarkus Dev UI (extensions, dev tools)
-
-The Task Console at **http://localhost:8380/** is also running but not
-auto-opened — the Management Console covers tasks too. Open the Task
-Console manually if you want to demo the end-user inbox UI separately.
-
-> No IDE required for this demo. The BPMN Editor at :8480 is the same
-> visual modeller that powers sandbox.kie.org, served entirely from your
-> laptop.
+> No local Quarkus, no IDE. The BPMN Editor at :8480 is the same
+> visual modeller that powers sandbox.kie.org, served entirely from
+> your laptop. Every Quarkus runtime in this demo runs **inside the
+> kind cluster**, deployed there by the editor itself.
 
 ### Heads-up: skip the Sandbox's "Log In" prompts
 
 On first load the BPMN Editor may offer to **Connect to GitHub /
-Bitbucket** or **Connect to OpenShift / Kubernetes**. Those are *optional*
-integrations for importing from a Git repo or deploying to a cluster —
-**this demo uses neither**. Dismiss / close the prompt; the editor itself
-needs no login. The analyst flow is purely: Import from URL → edit →
-Download → `./4-import.sh`.
+Bitbucket**. That's an *optional* integration for importing BPMN from
+a Git repo — this demo doesn't use it. Dismiss the prompt.
 
-### Sanity checks
-```bash
-curl -s localhost:8080/approvals                           # → []
-curl -s localhost:8090/approvals -o /dev/null -w "%{http_code}\n"   # → 200 (via proxy)
-curl -sI localhost:8280 | head -1                           # → 200 OK
-```
-
-> Cold-start build can be slow (~30-90s on first run, longer if pulling
-> images). The consoles are amd64-only and run under Rosetta on M-series
-> Macs — give them ~30s after the container starts before they're truly
-> usable.
+The **Connect to Kubernetes / OpenShift** prompts (Dev Deployments
+toolbar) DO get used in Scene 3 — `./1-run.sh` printed three values
+for you to paste there. They're also saved to `logs/devdeploy-wizard.txt`.
 
 ---
 
-## Scene 1 — "A simple Claims process?" (the BPMN model in your local Sandbox)
+## Scene 1 — "Meet the BPMN Editor"
 
-💬  *"Picture a typical claims approval: a customer submits a claim, a
-front-line analyst gives it a first look, and then a senior analyst signs it
-off. To prevent fraud, the two approvers must be different people. That's the
-process we're going to model — four steps end-to-end:*
-
-1. *A claim arrives (kicks the process off — no human needed).*
-2. ***First-line approval*** *— a manager reviews the claim and decides.*
-3. ***Second-line approval*** *— a different manager double-checks and signs off.*
-4. *The claim is closed (paid out, rejected, or routed onward).*
-
-*That's a real compliance pattern called the **four-eye principle** — and we'll
-see in a moment that the engine enforces 'different people' for us, no
-application code required."*
+💬  *"This is sandbox.kie.org — running entirely on my laptop. Same
+visual modeller a business analyst would use in the browser, no
+install, no account. Let me load up an example claims-approval
+process so we have something to talk about."*
 
 🖱  Switch to the **BPMN Editor** tab (http://localhost:8480/).
 
-💬  *"This is sandbox.kie.org — but running entirely on my laptop. Same
-visual modeller a business analyst uses in the browser, no install, no
-account. I'm going to import our claims process from the running project."*
-
-🖱  On the editor home, click **Import** (or use the import card). Paste the URL printed by `1-run.sh`:
+🖱  On the editor home, click **Import**. Paste:
 
 ```
 http://localhost:8090/bpmn/approval.bpmn
 ```
 
-🖱  Click **Import**. The graphical editor renders the diagram.
+🖱  Click **Import**. The graphical editor renders.
 
 ![Approval process](docs/screenshots/02-vscode.png)
 
-👀 Audience sees a left-to-right flow that maps onto exactly those four steps:
+👀 Audience sees a left-to-right flow:
 *Start ▶ "First Line Approval" (user task) ▶ "Second Line Approval" (user task) ▶ End*
 
-💬  *"BPMN — Business Process Model and Notation — is a visual standard for
-modelling business processes. Every shape has a precise meaning. The circle on
-the left is a **start event** — that's step 1. The rounded rectangles with the
-little person icon are **user tasks** — steps that need a human, our two
-approvals. The circle on the right is the **end event**. The arrows are
-sequence flow — they say what runs next. That's almost the whole vocabulary
-you need to read this diagram."*
+💬  *"BPMN — Business Process Model and Notation — is a visual standard.
+Every shape has a precise meaning. Circle on the left is a start event.
+Rounded rectangles with the little person icon are user tasks — steps
+that need a human. Circle on the right is the end. Arrows are sequence
+flow. That's almost the whole vocabulary you need to read this diagram.
+A business analyst can read this; an engineer ships exactly the same
+file to production."*
 
 🖱  Click **First Line Approval**. Properties panel opens.
 
-👀 Properties show: name, assignment (group: `managers`), input/output mappings.
+👀 Properties show: name, assignment (group: `managers`), input/output
+mappings.
 
-💬  *"Notice this is just a graphical representation — under the hood it's
-XML. But you and a business analyst can read this together, and what you see
-is what runs in production. There's no separate 'business view' and
-'engineering view' — same file, same tool."*
-
-💡 *(if asked)* The file is `.bpmn` — pure BPMN 2.0 standard. The flow itself
-is portable; the data-mapping and assignment annotations used here are
-Kogito/jBPM extensions, so a perfect 1:1 swap to Camunda or Flowable would
-need their equivalent extensions wired in.
+💡 *(if asked)* Pure BPMN 2.0 standard. The data-mapping and
+assignment annotations are Kogito/jBPM extensions — a 1:1 swap to
+Camunda or Flowable would need their equivalents wired in.
 
 ---
 
-## Scene 2 — "How does Kogito turn a diagram into a service?"
+## Scene 2 — "Tweak the model as an analyst"
 
-🖱  Switch to **Terminal A** (Quarkus running). Scroll up to the build banner.
+💬  *"Let me make a change you'd see in real life — renaming a step
+to fit a new business term."*
 
-👀 Audience sees Quarkus startup log — fast (~3s) boot.
+🖱  Click **First Line Approval** → in the right-hand Properties
+panel, rename it to "**Compliance Check**".
 
-💬  *"Kogito takes that BPMN file at build time and code-generates a working
-REST API. We didn't write a single REST controller. Let me show you."*
+🖱  *(Optional, if you've got time)*: change the assignment group, add
+documentation, drag a new task in.
 
-🖱  Open **http://localhost:8080/q/swagger-ui/** in the browser.
-
-👀 Audience sees endpoints: `POST /approvals`, `GET /approvals`,
-`/approvals/{id}/firstLineApproval/{tid}`, `/approvals/{id}/secondLineApproval/{tid}`.
-
-💬  *"Every endpoint here was generated from the BPMN. The user-task
-endpoints are named after the tasks in the diagram. If I rename a task in VS
-Code and save, this URL changes too — the diagram IS the API."*
-
-💡 *(if asked)* It's not interpreted at runtime — Kogito compiles the BPMN
-to Java at build time. Hence the fast startup and native-image friendliness.
+💬  *"That's it. No code, no IDE, no engineer needed."*
 
 ---
 
-## Scene 3 — "Drive the first half of the process"
+## Scene 3 — "Deploy to Kubernetes from the editor"
 
-🖱  Open **http://localhost:8280/** (KIE Management Console).
+💬  *"Now the trick: the same diagram becomes a real running REST
+service. Watch."*
 
-👀 Audience sees the console UI, navigation: Process Instances, Jobs, Tasks.
-
-🖱  In a terminal: `./2-demo.sh` and press Enter twice to advance to step 2 (POST /approvals).
-
-👀 The script POSTs an approval payload (a `traveller`) and prints the new instance UUID.
-
-💬  *"That UUID is now a real running BPMN process inside the JVM. Right
-now it's parked on the first-line approval, waiting for a human."*
-
-🖱  Switch to the Management Console → click **Process Instances** in the side nav.
-
-👀 A row appears with state `Active`.
-
-🖱  Click the row.
-
-👀 Detail page loads. Breadcrumb reads
-`local (Unknown user @ http://localhost:8090) > Process Instances > {uuid}`.
-Three panels are visible:
-- **Details** — Name `approvals`, State `Active`, the instance Id, and an
-  **Endpoint** of `http://localhost:8090` (that's the CORS proxy the console
-  talks to — same URL we wired up in Scene 0).
-- **Variables** — the exact `traveller` JSON we just POSTed, live from the
-  engine.
-- **Timeline** — `StartProcess` ✓ a few seconds ago, then **First Line
-  Approval — Active** with a person icon.
-
-💬  *"Live state. The engine is telling us exactly where in the process this
-instance is — parked on First Line Approval, waiting for a human, and the
-variables it's carrying are right there. Imagine a customer-facing dashboard
-rendering this same timeline — 'your loan application is at the credit check
-stage'. That's what this is giving you for free."*
-
----
-
-## Scene 4 — "Approve as a manager (impersonation)"
-
-🖱  In the Management Console side nav, click **Tasks**.
-
-👀 Empty list — "Anonymous" doesn't see anything.
-
-💬  *"By default I'm logged in as Anonymous, who isn't in the managers
-group. Real production would use OIDC for auth. For demo purposes the
-console has an Impersonate feature."*
-
-🖱  Expand the **Impersonating** panel at the top of the Tasks page (the
-collapsible card labelled "Impersonating 'Anonymous'" — click the chevron).
-
-🖱  Fill in:
-- **User:** `manager`
-- **Groups:** `managers`  *(helper text: "Comma-separated list, no spaces.")*
-- Click **Apply**.
-
-👀 Panel collapses; the header now reads `Impersonating 'manager'`. The
-**First Line Approval** task appears in the list with a **Reserved** badge
-next to its name.
-
-🖱  Click the task → form panel renders showing the Traveller fields
-(Address > City "Boston", Country "US", Nationality "American", etc.).
-
-🖱  **Tick the `Approved` checkbox**, then click **Complete**.
-*(Buttons available: **Complete / Release / Skip**.)*
-
-💬  *"That checkbox isn't hand-coded UI — it's auto-generated from the BPMN
-task's `approved: Boolean` data output. Whatever the manager ticks here
-flows back into the process variables. Watch."*
-
-👀 Task disappears from the inbox. Back to **Process Instances** → click the
-row → **Variables** now contains an extra `approved: true`, and the
-**Timeline** shows First Line Approval ✓ and **Second Line Approval —
-Active**.
-
-💬  *"First approval done — and the engine recorded who approved it. Now the
-four-eye part: I'll try to approve the second step as the same person…"*
-
----
-
-## Scene 5 — "The four-eye principle in action"
-
-🖱  Stay on the **Tasks** tab, still impersonating `manager`.
-
-👀 The inbox is **empty**. The Second Line Approval task is *not visible* to
-this user.
-
-💬  *"That's the four-eye principle — at the model level. The BPMN wires the
-second task's `ExcludedOwnerId` to whoever completed the first task, so the
-engine quietly removes that user from the second task's candidate list.
-Nothing for me to enforce in application code; the rule is in the diagram."*
-
-💡 *(if asked)* See `approval.bpmn` — the Second Line Approval task has an
-`ExcludedOwnerId` input mapped from the first task's `ActorId` output. Pure
-BPMN; portable.
-
-🖱  Re-open the **Impersonating** panel and switch:
-- **User:** `mary`
-- **Groups:** `managers`
-- Click **Apply**.
-
-👀 Inbox now shows **Second Line Approval — Reserved**.
-
-🖱  Click it → tick **Approved** → **Complete**.
-
-👀 **Process Instances** with the default (Active) filter: the row is gone.
-Switch the filter to **Completed** → click the row → the **Timeline** shows
-StartProcess ✓, First Line Approval ✓, Second Line Approval ✓, EndProcess ✓.
-
-💬  *"Full lifecycle. Started by a REST call, advanced by two different
-humans, completed cleanly. The compliance rule was enforced by the model —
-no application code needed."*
-
----
-
-## Scene 6 — "What changes when an analyst edits the model?"
-
-🖱  Switch back to the **BPMN Editor** tab (http://localhost:8480/) — the
-diagram you imported in Scene 1 is still there.
-
-🖱  Click the **First Line Approval** task → in the properties panel on the
-right, rename it to "**Compliance Check**".
-
-🖱  In the editor toolbar, click **Download** (or the kebab menu →
-Download). The file lands in your `~/Downloads` folder as `approval.bpmn`.
-
-🖱  In a terminal, run:
-
-```bash
-./4-import.sh
-```
-
-That copies the freshly downloaded file over
-`workflow/src/main/resources/org/acme/travels/approval.bpmn`. Quarkus dev
-mode picks the change up on the next request — no restart.
-
-🖱  POST another `/approvals` via Swagger UI (or run `./2-demo.sh`).
-
-🖱  Switch to Management Console → Process Instances → click the new row.
-
-👀 The **Timeline** lists the renamed step (`Compliance Check — Active`)
-instead of `First Line Approval`, and the Tasks inbox shows the new name
-too. **No restart.** Hot reload.
-
-💬  *"That's the analyst loop, end-to-end in a browser: open the model,
-rename a task, download, import, see it live. The diagram really is the
-source of truth — both for the people who design the process and for the
-service that runs it."*
-
----
-
-## Bonus scene — "Deploy this to a real cluster from the editor" (Dev Deployments)
-
-> Skip if you ran with `./1-run.sh --no-devdeploy`.
-
-🖱  Switch to the **BPMN Editor** tab (http://localhost:8480/).
-
-🖱  In the top toolbar, click **Dev Deployments ▾** → **Connect to an account…**
+🖱  Top toolbar: **Dev Deployments ▾ → Connect to an account…**
 
 🖱  Choose **Kubernetes** in the provider list.
 
 When the wizard opens, ignore the multi-step "Configure a new local
-Kubernetes cluster" instructions — `./1-run.sh` already did all of that
-for you. Skip to **step 2 — Set connection info**, paste the three
+Kubernetes cluster" instructions — `./1-run.sh` already did all of
+that. Skip to **step 2 — Set connection info**, paste the three
 values printed at the end of the run (also saved to
 `logs/devdeploy-wizard.txt`):
 
 - **Namespace:** `local-kie-sandbox-dev-deployments`
 - **Kubernetes API URL:** `http://localhost/kube-apiserver`
-- **Token:** *(printed by `./1-run.sh`; full value in
-  `logs/devdeploy-wizard.txt`)*
+- **Token:** *(printed by `./1-run.sh`)*
 
-🖱  Click **Connect**. The editor confirms the connection.
+🖱  Click **Connect**. The editor confirms.
 
-🖱  With `approval.bpmn` open in the editor, click **Dev Deployments ▾**
-→ **Deploy**. The editor packages the BPMN into a Quarkus image,
-applies a Deployment + Service + Ingress to the kind cluster, and
-returns a URL.
+🖱  With your BPMN open, **Dev Deployments ▾ → Deploy**.
 
-👀 In a few minutes a live Quarkus pod runs the same BPMN we've been
-editing — but inside Kubernetes, not on your laptop directly.
+👀 The editor packages the BPMN into a Quarkus image, applies a
+Deployment + Service + Ingress to kind, and shows a status badge:
+🟡 deploying → 🟢 ready (~60–90 s on first deploy).
 
-### Verifying the deployment
+💬  *"Behind the scenes, the editor just generated a complete Quarkus
+project around our BPMN — REST endpoints, persistence, the whole
+thing — and rolled it onto a real Kubernetes cluster. No engineer
+touched a pom.xml. Let me prove it's actually serving."*
 
-The fastest signal is in the editor: the **Dev Deployments ▾** panel
-shows a status badge per deployment.
-
-- 🟡 **In progress** — image building / pod scheduling (~30–60 s)
-- 🟢 **Ready** — pod is `Running` and ingress URL responds. The entry becomes a clickable link to the deployed app's Swagger UI.
-- 🔴 **Error** — click the entry for the message.
-
-If you want ground truth from `kubectl`:
+### Ground truth from the terminal
 
 ```bash
-# Pods and ingress in the deployments namespace
-kubectl --context kind-kie-sandbox-dev-cluster \
-  -n local-kie-sandbox-dev-deployments get deploy,svc,ingress,pods
-
-# Pod logs (replace <pod>)
-kubectl --context kind-kie-sandbox-dev-cluster \
-  -n local-kie-sandbox-dev-deployments logs <pod> --tail=50
+./5-exec.sh ls            # lists deployments + their path prefix
+./5-exec.sh url           # base URL + Swagger + health
+./5-exec.sh health        # → {"status":"UP", ...}
 ```
 
-A successful deploy shows `READY 1/1`, `STATUS Running`, and an Ingress
-with a `HOSTS` value.
+🖱  Run `./5-exec.sh swagger` — the deployed app's Swagger UI opens.
 
-To prove the *deployed BPMN itself* answers REST calls (same shape as
-Scene 3, just inside the cluster):
+👀 Endpoints generated from the BPMN: `POST /approvals`, `GET
+/approvals`, `/approvals/{id}/firstLineApproval/{tid}` (or whatever
+tasks are in *your* model — note how renaming a task in Scene 2 also
+renames the URL).
 
-```bash
-HOST=$(kubectl --context kind-kie-sandbox-dev-cluster \
-  -n local-kie-sandbox-dev-deployments \
-  get ingress -o jsonpath='{.items[0].spec.rules[0].host}')
-
-curl -sH "Host: $HOST" http://localhost/q/health/ready              # → {"status":"UP",…}
-curl -sH "Host: $HOST" -H 'Content-Type: application/json' \
-  -d '{"traveller":{"firstName":"Dev","lastName":"Deploy","email":"x","nationality":"x","address":{"street":"x","city":"x","zipCode":"x","country":"x"}}}' \
-  http://localhost/approvals
-```
-
-A JSON response with an `id` field on the second call means the
-deployed BPMN is live — same proof your local Quarkus on `:8080` gives
-you, just running inside Kubernetes.
-
-| Symptom | Likely cause |
-|---|---|
-| Stays 🟡 for >2 min | Quarkus base image pull on first deploy (~250 MB) — keep waiting. |
-| 🔴 "ImagePullBackOff" | `kubectl describe pod <pod>` shows the registry it tried. |
-| 🟢 but `curl` returns 502 | Ingress controller hasn't reloaded — wait 5 s and retry. |
-| Pod `CrashLoopBackOff` | BPMN has a build error; Kogito codegen failure shows in pod logs. |
-
-💬  *"That's the same artefact — same `approval.bpmn` we've been
-editing — going from analyst-laptop to a Kubernetes cluster with no
-build step on my side. The editor packaged it; the cluster runs it.
-For a real environment swap kind for OpenShift and the flow is
-identical."*
-
-💡 *(if asked)* This is what the "OpenShift" provider in the same
-wizard targets, with an OAuth flow instead of a paste-token. Same
-mechanism.
+💡 *(if asked)* It's not interpreted at runtime — Kogito compiles the
+BPMN to Java at build time. Hence fast startup and native-image
+friendliness. The kind pod *is* a Quarkus container, exactly the same
+shape as a production deployment.
 
 ---
 
-## Scene 7 — "What about production?"
+## Scene 4 — "Drive the process end-to-end"
 
-💬  *"Four things I'm not showing today, but they're part of this stack:"*
+🖱  In a terminal, start an instance:
 
-1. **Persistence** — RocksDB for embedded, Postgres for shared/clustered. Plug-and-play.
-2. **Eventing** — Process events to Kafka, so other services can subscribe.
+```bash
+./5-exec.sh start approvals '{"traveller":{"firstName":"John","lastName":"Doe","email":"j@d","nationality":"American","address":{"street":"main","city":"Boston","zipCode":"10005","country":"US"}}}'
+```
+
+(Replace `approvals` with your process ID — Scene 2's Properties panel
+showed it.)
+
+👀 Returns `{"id":"<uuid>", ...}` — that UUID is now a real running
+BPMN process inside the cluster's Quarkus pod, parked on the first
+user task waiting for a human.
+
+### The Management Console
+
+🖱  Run `./5-exec.sh console` — prints the alias and URL to paste.
+
+🖱  Open http://localhost:8281, click **+ Connect to a runtime…**, paste:
+- **Alias:** `cloud`
+- **URL:** the URL `./5-exec.sh console` printed (looks like
+  `http://localhost:8090/cluster/<deployId>`)
+
+🖱  Click **Process Instances** → click the row.
+
+👀 Detail page: three panels — **Details** (name, state, endpoint),
+**Variables** (the JSON we just POSTed, live from the engine),
+**Timeline** (`StartProcess` ✓, then **First Line Approval — Active**
+with a person icon). And the **Diagram** pane renders the BPMN with
+the active step **highlighted in red**.
+
+💬  *"Live state. The engine is telling us exactly where this instance
+is, the variables it carries, and the diagram lights up the active
+step. Imagine a customer-facing dashboard rendering this same
+timeline — 'your loan application is at the credit-check stage'.
+That's what this is giving you for free."*
+
+---
+
+## Scene 5 — "Approve the task; see it advance"
+
+In a terminal:
+
+```bash
+ID=<the-uuid-from-Scene-4>
+./5-exec.sh tasks approvals $ID            # find the task ID + name
+```
+
+🖱  Complete via Swagger UI (`./5-exec.sh swagger`) — `POST
+/approvals/{id}/firstLineApproval/{taskId}` with `{"approved":true}`,
+`?phase=complete`.
+
+👀 Refresh the Mgmt Console row → Variables now contains
+`approved: true`; Timeline shows First Line Approval ✓ and **Second
+Line Approval — Active**. The Diagram pane red-highlight has moved
+to the next user task.
+
+💬  *"Same diagram, advancing in real time. Now the 'production' part:
+swap kind for OpenShift, swap the paste-token for an OAuth flow, swap
+manual `5-exec.sh` calls for whatever orchestrates your real
+processes. The story stays identical — the diagram is the source of
+truth, the Quarkus runtime is the engine, the Mgmt Console is the
+operations dashboard."*
+
+---
+
+## Scene 6 — "Edit, redeploy, see the change"
+
+💬  *"Last move: an analyst edits the model, redeploys, and the new
+version is live."*
+
+🖱  Switch back to the **BPMN Editor**.
+
+🖱  Rename another task or add a script task.
+
+🖱  **Dev Deployments ▾ → Deploy**.
+
+👀 A *new* deployment appears alongside the previous one (each deploy
+gets its own ID).
+
+🖱  Run `./5-exec.sh ls` — both versions visible.
+
+🖱  Run `./5-exec.sh console` to get the connect URL for the new one,
+paste into the Mgmt Console as a *separate* runtime (alias `cloud-v2`
+or similar). Now you've got two versions of the process running side
+by side, each with its own dashboard.
+
+💬  *"That's the analyst loop, end-to-end in a browser: open the
+model, change something, redeploy, see it live. Same artefact from
+laptop to Kubernetes, no build step on my side."*
+
+---
+
+## Scene 7 — "What about real production?"
+
+💬  *"Four things this demo doesn't show but are part of the same
+stack:"*
+
+1. **Persistence** — the deployed image already includes
+   `kie-addons-quarkus-persistence-jdbc`. Swap embedded H2 for
+   Postgres in production.
+2. **Eventing** — process events to Kafka so other services can
+   subscribe. One add-on dependency away.
 3. **Native compilation** — `mvn package -Pnative` produces a ~50 MB
    stand-alone binary that boots in ~50 ms. Great for serverless.
-4. **Kubernetes / OpenShift** — Quarkus produces a standard OCI image, so the
-   workflow is just another container in your cluster. The
+4. **OpenShift** — the same Dev Deployments wizard's "OpenShift"
+   provider replaces the paste-token with OAuth. Same flow,
+   production-grade target. The
    [**Kogito Operator**](https://docs.kogito.kie.org/latest/html_single/#chap-kogito-deploying-on-openshift)
-   on OpenShift takes that further: define a `KogitoRuntime` custom resource
-   pointing at your image, and the operator wires up the deployment, service,
-   route, persistence, and Kafka connections for you. The Management and Task
-   Consoles ship as their own operator-managed resources too. Same model on
-   vanilla Kubernetes via Helm charts; OpenShift adds developer-console
-   integration and S2I builds from a Git repo.
-
-💬  *"And the auth piece — in production the Impersonate dropdown is
-replaced by Keycloak / Okta / Azure AD. The user identity flows through to
-the engine and the four-eye principle becomes a real audit trail."*
+   wires deployments, services, routes, persistence, and Kafka for
+   you via a `KogitoRuntime` custom resource.
 
 ---
 
@@ -464,35 +288,28 @@ the engine and the four-eye principle becomes a real audit trail."*
 
 | Question | Where to take it |
 |---|---|
-| "Can a non-developer edit this?" | Already shown in Scene 6 — the BPMN Editor on :8480 *is* sandbox.kie.org running locally. No IDE involved. |
+| "Can a non-developer edit this?" | Already shown in Scene 2 — the BPMN Editor on :8480 *is* sandbox.kie.org running locally. No IDE involved. |
+| "Does the deployed app have all the production add-ons?" | The patched dev-deploy image (`images/dev-deployment-quarkus-blank-app-svg/`) bakes `kogito-addons-quarkus-process-svg` on top of the upstream image (which already ships `process-management`, `data-index-jpa`, `persistence-jdbc`, `jobs`). Add more deps the same way. |
 | "How does this differ from jBPM?" | Kogito IS the cloud-native evolution of jBPM. Same engine, packaged for Quarkus / Spring / native. |
 | "Decision rules?" | Same toolchain edits DMN files (Decision Model and Notation) alongside BPMN. |
-| "OpenShift?" | Kogito Operator + standard Quarkus container build. |
-| "Does it scale?" | Stateless workers + external state store; events through Kafka. SonataFlow is the serverless variant. |
-| "Why not Camunda?" | Honest answer: similar capabilities; Kogito is tighter Quarkus integration & native image; Camunda has a larger commercial ecosystem. Both are good. |
+| "Can the process state outlive the pod?" | Yes — JDBC persistence is wired in. Configure a Postgres DataSource and the deployment image will use it. |
+| "Why not Camunda?" | Honest answer: similar capabilities; Kogito has tighter Quarkus integration & native image; Camunda has a larger commercial ecosystem. Both are good. |
 
 ---
 
 ## Cleanup
 
-🖱  Stop everything (workflow, proxy, consoles, editor, kind cluster) and reclaim the Docker images we pulled:
+🖱  Stop everything:
 ```bash
 ./3-teardown.sh
 ```
-By default this leaves `kind` / `kubectl` installed and preserves
-`./data/` (the RocksDB persistence). Variants:
+Default behaviour preserves the kind cluster, Docker images, and
+`./data` so the next run starts in ~30 s. Variants:
 
 | Flag | Adds to default |
 |---|---|
-| `--keep-images` | Leave Docker images on disk (faster next start) |
-| `--keep-kind`   | Leave the kind cluster running |
-| `--wipe-data`   | Also delete `./data` (forget all process history) |
-| `--full`        | Wipe `./data` AND uninstall `kind` + `kubectl` (best-effort, brew on macOS) |
-
-🖱  Revert the BPMN edit if you want a clean repo:
-```bash
-git checkout -- workflow/src/main/resources/org/acme/travels/approval.bpmn
-```
+| `--wipe-data` | Also delete `./data` |
+| `--full` | Delete the kind cluster, prune demo Docker images, wipe `./data`, and brew-uninstall `kind` + `kubectl` |
 
 ---
 
@@ -501,53 +318,65 @@ git checkout -- workflow/src/main/resources/org/acme/travels/approval.bpmn
 | Purpose | URL |
 |---|---|
 | BPMN Editor (local sandbox.kie.org) | http://localhost:8480 |
-| BPMN file the editor imports | http://localhost:8090/bpmn/approval.bpmn |
-| KIE Management Console | http://localhost:8281 |
+| Sample BPMN to import | http://localhost:8090/bpmn/approval.bpmn |
+| Management Console | http://localhost:8281 |
+| Read-only KIE viewer for any deployed BPMN | run `./5-exec.sh viewer` |
 | Cloud-deployed app's Swagger UI | run `./5-exec.sh swagger` |
 | CORS proxy (used internally by the consoles) | http://localhost:8090 |
 
-## Cheat sheet — fallback curl one-liners
+## Cheat sheet — `./5-exec.sh` subcommands
 
-```bash
-# Start an approval
-curl -s -X POST -H 'Content-Type: application/json' \
-  -d '{"traveller":{"firstName":"John","lastName":"Doe","email":"jon.doe@example.com","nationality":"American","address":{"street":"main","city":"Boston","zipCode":"10005","country":"US"}}}' \
-  http://localhost:8080/approvals | jq .
-
-# List active
-curl -s http://localhost:8080/approvals | jq .
-
-# Inspect tasks via data-index (no user filter)
-curl -s -X POST -H 'Content-Type: application/json' \
-  -d '{"query":"{ UserTaskInstances { id name actualOwner state processId } }"}' \
-  http://localhost:8090/graphql | jq .
 ```
+url               base URL + Swagger + health for the current deployment
+swagger           open the deployed Swagger UI in a browser
+health            GET /q/health/ready
+ls                list all deployments in the kind cluster
+console           print the alias + URL to paste into the Mgmt Console
+viewer            open a read-only KIE editor on the deployed BPMN
+list  [proc]      list active instances
+start [proc] [json]   POST a new instance
+get   [proc] <iid>    inspect one instance
+tasks [proc] <iid>    list user tasks waiting on humans
+complete [proc] <iid> <task-name> <tid> [json]   complete a user task
+```
+
+Defaults to process-id `hiring`. Override with `DEFAULT_PROCESS=approvals
+./5-exec.sh ...` per-session.
 
 ## Architecture (what's actually running)
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│                          Browser tabs                                │
-│  ┌──────────────┐ ┌────────────┐ ┌───────────┐ ┌────────────┐        │
-│  │ BPMN Editor  │ │ Mgmt :8280 │ │ Task:8380 │ │ Swagger    │        │
-│  │ (Sandbox)    │ └─────┬──────┘ └─────┬─────┘ └──────┬─────┘        │
-│  │   :8480      │       │              │              │              │
-│  └──────┬───────┘       │              │              │              │
-└─────────┼───────────────┼──────────────┼──────────────┼──────────────┘
-          │ imports BPMN  │              │              │
-          ▼               ▼              ▼              ▼
-   ┌────────────────────────────────────────┐   ┌───────────┐
-   │ CORS proxy :8090                       │   │ Direct to │
-   │   /bpmn/*  → workflow/.../approval.bpmn│   │  :8080    │
-   │   /graphql → :8180                     │   └─────┬─────┘
-   │   *        → :8080                     │         │
-   └──┬───────────────────┬─────────────────┘         │
-      │                   │                           │
-      ▼                   ▼                           ▼
- ┌──────────────┐    ┌────────────────────────┐
- │ Data Index   │    │ Quarkus runtime :8080  │
- │  :8180       │◀───│  (Kogito + jBPM)       │
- │  (GraphQL)   │    │  - approval.bpmn       │
- └──────────────┘    │  - REST + add-ons      │
-                     └────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                       Browser tabs                           │
+│  ┌──────────────┐  ┌─────────────────┐                       │
+│  │ BPMN Editor  │  │   Management    │                       │
+│  │ (Sandbox)    │  │   Console       │                       │
+│  │   :8480      │  │   :8281         │                       │
+│  └──────┬───────┘  └────────┬────────┘                       │
+└─────────┼───────────────────┼────────────────────────────────┘
+          │                   │
+          ▼                   ▼
+   ┌────────────────────────────────────────────────────────┐
+   │ CORS proxy :8090                                        │
+   │   /bpmn/<file>      → samples/<file>                    │
+   │   /viewer/<id>/<p>  → in-proxy KIE read-only editor     │
+   │   /cluster/<id>/*   → kind ingress :80                  │
+   └─────────────────────────┬───────────────────────────────┘
+                             │
+                             ▼
+   ┌────────────────────────────────────────────────────────┐
+   │ kind cluster (kie-sandbox-dev-cluster)                  │
+   │ ┌────────────────────────────────────────────────────┐  │
+   │ │ ingress-nginx :80                                   │  │
+   │ │   /dev-deployment-<id>/* → Service → Quarkus pod    │  │
+   │ │ ┌────────────────────────────────────────────────┐  │  │
+   │ │ │ Quarkus pod  (built from BPMN at deploy time)   │  │  │
+   │ │ │   - kogito-addons-quarkus-process-svg ✦         │  │  │
+   │ │ │   - process-management, data-index-jpa, jobs    │  │  │
+   │ │ │   - REST API auto-generated from BPMN           │  │  │
+   │ │ └────────────────────────────────────────────────┘  │  │
+   │ │   ✦ added on top of the upstream Sandbox base image │  │
+   │ │     by images/dev-deployment-quarkus-blank-app-svg/ │  │
+   │ └────────────────────────────────────────────────────┘  │
+   └────────────────────────────────────────────────────────┘
 ```

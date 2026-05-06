@@ -1,17 +1,13 @@
-# OS / editor
+# OS / editor / AI
 .DS_Store
 .idea/
 .vscode/
 *.swp
-
-# Build outputs
-workflow/target/
-workflow/.mvn/wrapper/maven-wrapper.jar
-workflow/dependency-reduced-pom.xml
+.claude/
+.chatgpt/
+.gptcache/
 
 # Runtime state
-workflow/rockdstemp/
-workflow/data/
 data/
 node_modules/
 

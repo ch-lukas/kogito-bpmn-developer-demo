@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 // Tiny CORS-injecting reverse proxy with path-based routing. No deps.
 //
-// Routes /graphql (and /graphql/* and /graphiql*) to the Kogito Data Index
-// (default http://localhost:8180) and everything else to the Quarkus runtime
-// (default http://localhost:8080). Adds permissive CORS headers to every
-// response so the KIE Management Console at http://localhost:8280 can connect.
+// Routes (in order):
+//   /viewer/<deployId>/<processId>   → in-proxy read-only KIE BPMN viewer
+//   /bpmn/<file>.bpmn                → serve from samples/ (for the editor's import)
+//   /cluster/<deployId>/<rest>       → kind ingress at /dev-deployment-<deployId>/<rest>
+//
+// All responses get CORS headers so the BPMN Editor (:8480) and Management
+// Console (:8281) can talk to anything served here from any origin.
 //
 //   PORT=8090 \
-//   RUNTIME=http://localhost:8080 \
-//   DATA_INDEX=http://localhost:8180 \
+//   CLUSTER_INGRESS=http://localhost \
 //   node cors-proxy.js
 
 const http = require('node:http');
@@ -17,24 +19,13 @@ const path = require('node:path');
 const { URL } = require('node:url');
 
 const PORT = Number(process.env.PORT || 8090);
-const RUNTIME = new URL(process.env.RUNTIME || 'http://localhost:8080');
-const DATA_INDEX = new URL(process.env.DATA_INDEX || 'http://localhost:8180');
-// The kind cluster's nginx ingress on host:80 — the Sandbox's Dev
-// Deployments hang off path-prefixes there (e.g. /dev-deployment-<id>).
+// The kind cluster's nginx ingress on host:80 — Sandbox Dev Deployments
+// hang off path-prefixes there (e.g. /dev-deployment-<id>).
 const CLUSTER_INGRESS = new URL(process.env.CLUSTER_INGRESS || 'http://localhost');
 
-// Static file the BPMN Editor (local Sandbox on :8480) imports via URL.
-// Served from the live source tree so analysts always pull the current file.
-const BPMN_DIR = path.join(
-  __dirname,
-  'workflow',
-  'src',
-  'main',
-  'resources',
-  'org',
-  'acme',
-  'travels',
-);
+// Sample BPMN files the editor can import directly via /bpmn/<file>.bpmn.
+// Path-traversal-guarded by the regex match below.
+const BPMN_DIR = path.join(__dirname, 'samples');
 
 // HTML for the standalone read-only diagram viewer. Loads
 // @kie-tools/kie-editors-standalone (the KIE-tools BPMN editor packaged
@@ -107,12 +98,6 @@ function viewerHtml({ deployId, processId }) {
 </html>`;
 }
 
-function pickTarget(reqUrl) {
-  // Anything graphql-ish goes to data-index; everything else to the runtime.
-  if (/^\/(graphql|graphiql)(\/|$|\?)/.test(reqUrl)) return DATA_INDEX;
-  return RUNTIME;
-}
-
 function corsHeaders(req) {
   // Echo the caller's Origin (or fall back to *). Echoing is required when
   // Allow-Credentials is true — browsers reject (*) + credentials.
@@ -138,8 +123,9 @@ const server = http.createServer((req, res) => {
   // /viewer/<deployId>/<processId> — read-only KIE editor canvas (no
   // Sandbox chrome) for a cluster-deployed BPMN. Live token overlay isn't
   // available because kie-editors-standalone is an editor, not a runtime
-  // visualizer; for the local approval process the local Mgmt Console at
-  // :8280 already does that via kie-addons-quarkus-process-svg.
+  // visualizer; the cloud Mgmt Console at :8281 does that via the
+  // kie-addons-quarkus-process-svg add-on baked into the patched dev-
+  // deploy image (images/dev-deployment-quarkus-blank-app-svg/).
   const viewerMatch = req.url.match(
     /^\/viewer\/([A-Za-z0-9_-]+)\/([A-Za-z0-9_-]+)\/?$/,
   );
@@ -154,8 +140,8 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // /bpmn/<filename>.bpmn — serve from workflow source tree so the BPMN
-  // Editor on :8480 can import the live file. Path-traversal-guarded.
+  // /bpmn/<filename>.bpmn — serve a starter BPMN from samples/ so the
+  // editor at :8480 can import via URL. Path-traversal-guarded.
   const bpmnMatch = req.url.match(/^\/bpmn\/([A-Za-z0-9_-]+\.bpmn)(?:\?.*)?$/);
   if (bpmnMatch) {
     const filePath = path.join(BPMN_DIR, bpmnMatch[1]);
@@ -176,54 +162,49 @@ const server = http.createServer((req, res) => {
   }
 
   // /cluster/<deployId>/<rest> — rewrite to /dev-deployment-<deployId>/<rest>
-  // and forward to the kind ingress on :80. Lets a Mgmt Console connect to
-  // a Sandbox-deployed app via this proxy so CORS works the same as for
-  // the local runtime.
+  // and forward to the kind ingress on :80. Lets the Mgmt Console connect
+  // to a Sandbox-deployed app via this proxy so CORS works the same as
+  // for the BPMN Editor.
   const clusterMatch = req.url.match(/^\/cluster\/([A-Za-z0-9_-]+)(\/.*)?$/);
-  let target;
-  let upstreamPath;
   if (clusterMatch) {
-    target = CLUSTER_INGRESS;
-    upstreamPath = `/dev-deployment-${clusterMatch[1]}${clusterMatch[2] || '/'}`;
-  } else {
-    target = pickTarget(req.url);
-    upstreamPath = req.url;
+    const upstreamPath = `/dev-deployment-${clusterMatch[1]}${clusterMatch[2] || '/'}`;
+    const upstream = http.request(
+      {
+        host: CLUSTER_INGRESS.hostname,
+        port: CLUSTER_INGRESS.port || 80,
+        path: upstreamPath,
+        method: req.method,
+        headers: { ...req.headers, host: CLUSTER_INGRESS.host },
+      },
+      (upRes) => {
+        const cleaned = Object.fromEntries(
+          Object.entries(upRes.headers).filter(
+            ([k]) => !k.toLowerCase().startsWith('access-control-'),
+          ),
+        );
+        res.writeHead(upRes.statusCode || 502, { ...cleaned, ...corsHeaders(req) });
+        upRes.pipe(res);
+      },
+    );
+    upstream.on('error', (err) => {
+      console.error(`[proxy] ${CLUSTER_INGRESS.origin}${upstreamPath} → ${err.message}`);
+      res.writeHead(502, { 'Content-Type': 'text/plain', ...corsHeaders(req) });
+      res.end(`Bad gateway: ${err.message}`);
+    });
+    req.pipe(upstream);
+    return;
   }
 
-  const upstream = http.request(
-    {
-      host: target.hostname,
-      port: target.port || 80,
-      path: upstreamPath,
-      method: req.method,
-      headers: { ...req.headers, host: target.host },
-    },
-    (upRes) => {
-      const cleaned = Object.fromEntries(
-        Object.entries(upRes.headers).filter(
-          ([k]) => !k.toLowerCase().startsWith('access-control-'),
-        ),
-      );
-      const headers = { ...cleaned, ...corsHeaders(req) };
-      res.writeHead(upRes.statusCode || 502, headers);
-      upRes.pipe(res);
-    },
-  );
-
-  upstream.on('error', (err) => {
-    console.error(`[proxy] ${target.origin}${req.url} → ${err.message}`);
-    res.writeHead(502, { 'Content-Type': 'text/plain', ...corsHeaders(req) });
-    res.end(`Bad gateway: ${err.message}`);
-  });
-
-  req.pipe(upstream);
+  // No matching route — return 404 with CORS headers (don't proxy random
+  // paths to anything; the local Quarkus runtime that used to be the
+  // catch-all is gone in the cloud-only flow).
+  res.writeHead(404, { 'Content-Type': 'text/plain', ...corsHeaders(req) });
+  res.end(`Not found: ${req.url}\nValid prefixes: /viewer/, /bpmn/, /cluster/<id>/`);
 });
 
 server.listen(PORT, () => {
   console.log(`[cors-proxy] listening on http://localhost:${PORT}`);
-  console.log(`[cors-proxy]   /graphql*           → ${DATA_INDEX.origin}`);
-  console.log(`[cors-proxy]   /bpmn/*             → ${BPMN_DIR}`);
-  console.log(`[cors-proxy]   /cluster/<id>/*     → ${CLUSTER_INGRESS.origin}/dev-deployment-<id>/*`);
-  console.log(`[cors-proxy]   /viewer/<id>/<p>    → in-proxy KIE read-only editor`);
-  console.log(`[cors-proxy]   everything else     → ${RUNTIME.origin}`);
+  console.log(`[cors-proxy]   /viewer/<id>/<p>  → in-proxy KIE read-only editor`);
+  console.log(`[cors-proxy]   /bpmn/*           → ${BPMN_DIR}`);
+  console.log(`[cors-proxy]   /cluster/<id>/*   → ${CLUSTER_INGRESS.origin}/dev-deployment-<id>/*`);
 });
