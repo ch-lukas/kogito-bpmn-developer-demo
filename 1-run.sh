@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# One-command bootstrap for the Kogito BPMN live demo.
-# Starts the workflow, data-index, CORS proxy, both consoles, the local
-# KIE Sandbox editor, and a kind cluster wired up for the Sandbox's Dev
-# Deployments feature.
+# One-command bootstrap for the analyst BPMN demo.
+# Starts the CORS proxy, the local KIE Sandbox editor, the cloud
+# Management Console, and a kind cluster wired up for the Sandbox's
+# Dev Deployments feature.
 #
 # Usage:
 #   ./1-run.sh                  # start everything in the background
@@ -16,10 +16,8 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
-RUNTIME_DIR="$REPO_ROOT/workflow"
 LOG_DIR="$REPO_ROOT/logs"
-DATA_DIR="$REPO_ROOT/data"
-mkdir -p "$LOG_DIR" "$DATA_DIR"
+mkdir -p "$LOG_DIR"
 
 # Flag parsing — match anywhere in $@
 FLAGS=" $* "
@@ -47,7 +45,6 @@ check_cmd() {
 
 say "Checking prerequisites…"
 check_cmd docker "Install Docker Desktop: https://www.docker.com/products/docker-desktop/"
-check_cmd mvn    "Install Maven: 'brew install maven' on macOS"
 check_cmd node   "Install Node 18+: 'brew install node' on macOS"
 
 if (( SKIP_DEVDEPLOY == 0 )); then
@@ -55,23 +52,6 @@ if (( SKIP_DEVDEPLOY == 0 )); then
   check_cmd kubectl "Install kubectl: 'brew install kubectl' on macOS, or see https://kubernetes.io/docs/tasks/tools/. Skip Dev Deployments with: ./1-run.sh --no-devdeploy"
 fi
 
-# JDK 17 specifically (Kogito 10.1.x requires it)
-if [[ -z "${JAVA_HOME:-}" || ! -x "$JAVA_HOME/bin/java" ]]; then
-  if [[ "$(uname)" == "Darwin" ]] && command -v /usr/libexec/java_home >/dev/null; then
-    if JAVA_HOME=$(/usr/libexec/java_home -v 17 2>/dev/null); then
-      export JAVA_HOME
-      ok "JAVA_HOME auto-set to $JAVA_HOME (JDK 17)"
-    else
-      die "JDK 17 not found. Install Temurin 17: 'brew install --cask temurin@17'"
-    fi
-  else
-    die "JAVA_HOME is not set. Point it at a JDK 17 installation."
-  fi
-fi
-JAVA_VER=$("$JAVA_HOME/bin/java" -version 2>&1 | head -1 | grep -oE '[0-9]+' | head -1)
-[[ "$JAVA_VER" == "17" ]] || die "JAVA_HOME points at JDK $JAVA_VER, but Kogito 10.1.x needs JDK 17."
-ok "JDK 17 ($JAVA_HOME)"
-ok "Maven $(mvn -v 2>&1 | head -1 | awk '{print $3}')"
 ok "Node $(node --version)"
 
 docker info >/dev/null 2>&1 || die "Docker daemon is not running. Start Docker Desktop and re-run."
@@ -85,71 +65,27 @@ if [[ "${1:-}" == "--check" ]]; then ok "Prerequisite check complete."; exit 0; 
 # -----------------------------------------------------------------------------
 if [[ "${1:-}" != "--no-teardown" ]]; then
   say "Clearing any previous demo state…"
-  # --keep-kind:   avoid the 60-90s kind cluster recreate on every run.
-  # --keep-images: the new run is about to pull these again.
-  "$REPO_ROOT/3-teardown.sh" --keep-kind --keep-images >/dev/null 2>&1 || true
+  # Default teardown preserves expensive things (kind cluster, images).
+  "$REPO_ROOT/3-teardown.sh" >/dev/null 2>&1 || true
   ok "Previous state cleared"
-fi
-
-# -----------------------------------------------------------------------------
-# Image preparation — work around a known broken Docker tag
-# Kogito's dev services request `data-index-ephemeral:10.1` but Docker Hub
-# only publishes `:10.1.0`. We retag locally so dev services can find it.
-# -----------------------------------------------------------------------------
-DI_IMG="apache/incubator-kie-kogito-data-index-ephemeral"
-if ! docker image inspect "$DI_IMG:10.1" >/dev/null 2>&1; then
-  say "Pulling and retagging $DI_IMG:10.1.0 → :10.1"
-  docker pull "$DI_IMG:10.1.0"
-  docker tag  "$DI_IMG:10.1.0" "$DI_IMG:10.1"
-  ok "Tagged $DI_IMG:10.1"
-else
-  ok "$DI_IMG:10.1 already present"
 fi
 
 # Pull console + editor images up-front for cleaner first-run timing
 docker pull apache/incubator-kie-kogito-management-console:10.1.0 >/dev/null 2>&1 &
-docker pull apache/incubator-kie-kogito-task-console:main         >/dev/null 2>&1 &
 docker pull apache/incubator-kie-sandbox-webapp:10.1.0            >/dev/null 2>&1 &
 wait
 
 # -----------------------------------------------------------------------------
-# Start the Quarkus runtime in background
-# -----------------------------------------------------------------------------
-say "Starting Quarkus runtime (this will compile & start jBPM)…"
-( cd "$RUNTIME_DIR" && nohup mvn -q clean compile quarkus:dev > "$LOG_DIR/quarkus.log" 2>&1 & )
-
-# Wait until the runtime really answers on port 8080. We can't trust
-# 'Listening on:' in the log file because the Data Index dev-service
-# container also logs that phrase (it binds to *its* container port 8080,
-# mapped to host 8180), giving a false positive.
-runtime_ready=false
-for ((i=0; i<240; i++)); do
-  # Bail early if Quarkus printed a fatal port-in-use error (means a stale
-  # java is still squatting 8080 — teardown should have caught it).
-  if grep -q "Port 8080 seems to be in use" "$LOG_DIR/quarkus.log" 2>/dev/null; then
-    die "Quarkus reports port 8080 already in use. Run './3-teardown.sh' and retry, or 'lsof -i:8080' to find the squatter."
-  fi
-  if curl -sf -o /dev/null --max-time 2 http://localhost:8080/q/health/ready 2>/dev/null; then
-    runtime_ready=true; break
-  fi
-  sleep 1
-  if (( i % 20 == 19 )); then warn "still starting… ($((i+1))s elapsed; tail -f $LOG_DIR/quarkus.log)"; fi
-done
-$runtime_ready || die "Quarkus did not become healthy in 4min. See $LOG_DIR/quarkus.log."
-ok "Quarkus runtime up on :8080"
-
-# -----------------------------------------------------------------------------
-# Start the CORS proxy
+# Start the CORS proxy (serves /bpmn/<file> for the editor + /cluster/<id>
+# rewrites for the cloud Mgmt Console + /viewer/<id>/<proc> read-only viewer)
 # -----------------------------------------------------------------------------
 say "Starting CORS proxy on :8090"
 ( cd "$REPO_ROOT" && nohup node cors-proxy.js > "$LOG_DIR/cors-proxy.log" 2>&1 & )
-# Retry the health probe — the proxy listener can take a moment to bind, and
-# the upstream Quarkus app finishes initialising even after "Listening on:".
 for ((i=0; i<20; i++)); do
-  if curl -sf -o /dev/null http://localhost:8090/approvals 2>/dev/null; then break; fi
+  if curl -sf -o /dev/null "http://localhost:8090/bpmn/approval.bpmn" 2>/dev/null; then break; fi
   sleep 0.5
 done
-curl -sf -o /dev/null http://localhost:8090/approvals \
+curl -sf -o /dev/null "http://localhost:8090/bpmn/approval.bpmn" \
   || die "CORS proxy not responding after 10s. See $LOG_DIR/cors-proxy.log."
 ok "CORS proxy up on :8090"
 
@@ -165,16 +101,6 @@ wait_http() {
   done
   warn "$label did not respond on $url within ${timeout}s — opening anyway."
 }
-
-say "Starting Task Console on :8380"
-docker rm -f kogito-task-console >/dev/null 2>&1 || true
-docker run -d --name kogito-task-console -p 8380:8080 \
-  -e RUNTIME_TOOLS_TASK_CONSOLE_KOGITO_ENV_MODE=DEV \
-  -e KOGITO_CONSOLES_KEYCLOAK_DISABLE_HEALTH_CHECK=true \
-  -e RUNTIME_TOOLS_TASK_CONSOLE_DATA_INDEX_ENDPOINT=http://localhost:8090/graphql \
-  apache/incubator-kie-kogito-task-console:main >/dev/null
-wait_http "http://localhost:8380/" 90 "Task Console"
-ok "Task Console up on :8380"
 
 # Single Management Console — points at the kind cluster's Sandbox
 # deployments via http://localhost:8090/cluster/<deployId>. Skipped if
@@ -372,10 +298,6 @@ if (( SKIP_DEVDEPLOY == 0 )); then
   printf "  ${GREEN}%-26s${RESET} %s\n" "Management Console" "http://localhost:8281"
   printf "  ${YELLOW}%-26s${RESET} %s\n" "  → After deploy run"  "./5-exec.sh console  # prints alias + URL to paste"
 fi
-printf "  ${GREEN}%-26s${RESET} %s\n" "Task Console"        "http://localhost:8380"
-printf "  ${GREEN}%-26s${RESET} %s\n" "Swagger UI"          "http://localhost:8080/q/swagger-ui/"
-printf "  ${GREEN}%-26s${RESET} %s\n" "Quarkus Dev UI"      "http://localhost:8080/q/dev-ui/"
-printf "  ${GREEN}%-26s${RESET} %s\n" "Data Index GraphiQL" "http://localhost:8180/graphiql/"
 
 if (( SKIP_DEVDEPLOY == 0 )) && [[ -n "$DEVDEPLOY_TOKEN" ]]; then
   echo
@@ -403,7 +325,6 @@ if [[ " $* " != *" --no-open "* ]]; then
     say "Opening browser tabs…"
     open_urls=("http://localhost:8480/")
     (( SKIP_DEVDEPLOY == 0 )) && open_urls+=("http://localhost:8281/")
-    open_urls+=("http://localhost:8080/q/swagger-ui/" "http://localhost:8080/q/dev-ui/")
     for url in "${open_urls[@]}"; do
       $opener "$url" >/dev/null 2>&1 &
     done
@@ -413,7 +334,7 @@ if [[ " $* " != *" --no-open "* ]]; then
   fi
 fi
 
-say "Walkthrough script:  ./DEMO.md"
-say "End-to-end script:   ./2-demo.sh"
-say "Logs:                tail -f $LOG_DIR/{quarkus,cors-proxy}.log"
-say "Stop everything:     ./3-teardown.sh"
+say "Drive deployments:   ./5-exec.sh  (start, list, viewer, console, …)"
+say "Logs:                tail -f $LOG_DIR/cors-proxy.log"
+say "Stop everything:     ./3-teardown.sh        (preserves kind cluster + images)"
+say "Full cleanup:        ./3-teardown.sh --full (deletes cluster, images, tools)"

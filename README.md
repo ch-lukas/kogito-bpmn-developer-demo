@@ -113,10 +113,6 @@ Demo is live. Open these in your browser:
     → Open file from URL  http://localhost:8090/bpmn/approval.bpmn
   Management Console     http://localhost:8281
     → After deploy run    ./5-exec.sh console  # prints alias + URL to paste
-  Task Console           http://localhost:8380
-  Swagger UI             http://localhost:8080/q/swagger-ui/
-  Quarkus Dev UI         http://localhost:8080/q/dev-ui/
-  Data Index GraphiQL    http://localhost:8180/graphiql/
 ```
 
 When you're done: `./3-teardown.sh` — stops every service, removes the
