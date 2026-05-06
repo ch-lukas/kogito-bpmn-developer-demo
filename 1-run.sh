@@ -45,6 +45,14 @@ ok()   { printf "${GREEN}✓ %s${RESET}\n" "$*"; }
 warn() { printf "${YELLOW}! %s${RESET}\n" "$*"; }
 die()  { printf "${RED}✗ %s${RESET}\n" "$*" >&2; exit 1; }
 
+# OSC 8 ANSI hyperlink — clickable in iTerm2, VS Code terminal, kitty,
+# alacritty, gnome-terminal, modern macOS Terminal.app. Falls back to
+# plain text on older terminals (escape codes are silently ignored).
+#   url_link  http://localhost:8480
+#   file_link /abs/path/to/file.txt   → renders as "/abs/path/to/file.txt"
+url_link()  { printf '\e]8;;%s\e\\%s\e]8;;\e\\' "$1" "${2:-$1}"; }
+file_link() { printf '"\e]8;;file://%s\e\\%s\e]8;;\e\\"' "$1" "$1"; }
+
 # -----------------------------------------------------------------------------
 # Prerequisite checks
 # -----------------------------------------------------------------------------
@@ -356,13 +364,13 @@ fi
 echo
 say "Demo is live. Open these in your browser:"
 echo
-printf "  ${GREEN}%-26s${RESET} %s\n" "BPMN Editor (Sandbox)" "http://localhost:8480"
+printf "  ${GREEN}%-26s${RESET} %s\n" "BPMN Editor (Sandbox)" "$(url_link http://localhost:8480)"
 if (( SKIP_DEVDEPLOY == 0 )); then
   printf "  ${YELLOW}%-26s${RESET} %s\n" "  → First-time setup"   "Dev Deployments ▾ → Connect to an account → Kubernetes;"
-  printf "  ${YELLOW}%-26s${RESET} %s\n" ""                       "paste values from $DEVDEPLOY_INFO_FILE (also shown below)"
+  printf "  ${YELLOW}%-26s${RESET} %s\n" ""                       "paste values from $(file_link "$DEVDEPLOY_INFO_FILE") (also shown below)"
 fi
 if (( SKIP_DEVDEPLOY == 0 )); then
-  printf "  ${GREEN}%-26s${RESET} %s\n" "Management Console" "http://localhost:8281"
+  printf "  ${GREEN}%-26s${RESET} %s\n" "Management Console" "$(url_link http://localhost:8281)"
   # Show concrete connect-URL details. If a single (already-healthy)
   # deployment exists from a previous session, use its id; otherwise
   # show the template with a "<deployId>" placeholder so the user can
@@ -382,9 +390,16 @@ if (( SKIP_DEVDEPLOY == 0 )); then
     MGMT_URL="http://localhost:8090/cluster/<deployId>"
     MGMT_URL_HINT="(after first deploy: ./2-exec.sh console prints exact URL)"
   fi
+  # Hyperlink the URL only when it's not the <deployId> placeholder
+  # (placeholders aren't navigable).
+  if [[ "$MGMT_URL" == *"<deployId>"* ]]; then
+    MGMT_URL_DISPLAY="$MGMT_URL"
+  else
+    MGMT_URL_DISPLAY="$(url_link "$MGMT_URL")"
+  fi
   printf "  ${YELLOW}%-26s${RESET} %s\n" "  → First-time setup"   "+ Connect to a runtime, then paste:"
   printf "  ${YELLOW}%-26s${RESET} %s\n" "      Alias"            "cloud"
-  printf "  ${YELLOW}%-26s${RESET} %s\n" "      URL"              "$MGMT_URL"
+  printf "  ${YELLOW}%-26s${RESET} %s\n" "      URL"              "$MGMT_URL_DISPLAY"
   printf "  ${YELLOW}%-26s${RESET} %s\n" ""                       "$MGMT_URL_HINT"
 fi
 
@@ -393,8 +408,8 @@ if (( SKIP_DEVDEPLOY == 0 )) && [[ -n "$DEVDEPLOY_TOKEN" ]]; then
   printf "${CYAN}▶ Dev Deployments — paste these into the editor's wizard:${RESET}\n"
   printf "  ${GREEN}%-22s${RESET} %s\n" "Namespace"          "$DEVDEPLOY_NS"
   printf "  ${GREEN}%-22s${RESET} %s\n" "Kubernetes API URL" "$DEVDEPLOY_API_URL"
-  printf "  ${GREEN}%-22s${RESET} %s\n" "Token"              "${DEVDEPLOY_TOKEN:0:20}…  (full token: $DEVDEPLOY_INFO_FILE)"
-  printf "  ${YELLOW}Editor route:${RESET}        http://localhost:8480 → Dev Deployments ▾ → Connect to an account…\n"
+  printf "  ${GREEN}%-22s${RESET} %s\n" "Token"              "${DEVDEPLOY_TOKEN:0:20}…  (full token: $(file_link "$DEVDEPLOY_INFO_FILE"))"
+  printf "  ${YELLOW}Editor route:${RESET}        $(url_link http://localhost:8480) → Dev Deployments ▾ → Connect to an account…\n"
 fi
 echo
 
