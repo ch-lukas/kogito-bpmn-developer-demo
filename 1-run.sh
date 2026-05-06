@@ -363,8 +363,29 @@ if (( SKIP_DEVDEPLOY == 0 )); then
 fi
 if (( SKIP_DEVDEPLOY == 0 )); then
   printf "  ${GREEN}%-26s${RESET} %s\n" "Management Console" "http://localhost:8281"
-  printf "  ${YELLOW}%-26s${RESET} %s\n" "  → First-time setup"   "+ Connect to a runtime; alias + URL come from"
-  printf "  ${YELLOW}%-26s${RESET} %s\n" ""                       "./2-exec.sh console (run after your first deploy)"
+  # Show concrete connect-URL details. If a single (already-healthy)
+  # deployment exists from a previous session, use its id; otherwise
+  # show the template with a "<deployId>" placeholder so the user can
+  # see the shape now and substitute after Deploy.
+  MGMT_URL_HINT=""
+  EXISTING_IDS=$(kubectl --context "kind-$KIND_CLUSTER_NAME" -n "$DEVDEPLOY_NS" \
+    get ingress -o jsonpath='{range .items[*]}{.metadata.labels.app}{"\n"}{end}' 2>/dev/null \
+    | sed 's/^dev-deployment-//' | sed '/^$/d')
+  EXISTING_COUNT=$(printf '%s\n' "$EXISTING_IDS" | sed '/^$/d' | wc -l | tr -d ' ')
+  if (( EXISTING_COUNT == 1 )); then
+    MGMT_URL="http://localhost:8090/cluster/${EXISTING_IDS}"
+    MGMT_URL_HINT="(picked the existing deployment '$EXISTING_IDS')"
+  elif (( EXISTING_COUNT > 1 )); then
+    MGMT_URL="http://localhost:8090/cluster/<deployId>"
+    MGMT_URL_HINT="(${EXISTING_COUNT} deployments live; ./2-exec.sh ls picks one)"
+  else
+    MGMT_URL="http://localhost:8090/cluster/<deployId>"
+    MGMT_URL_HINT="(after first deploy: ./2-exec.sh console prints exact URL)"
+  fi
+  printf "  ${YELLOW}%-26s${RESET} %s\n" "  → First-time setup"   "+ Connect to a runtime, then paste:"
+  printf "  ${YELLOW}%-26s${RESET} %s\n" "      Alias"            "cloud"
+  printf "  ${YELLOW}%-26s${RESET} %s\n" "      URL"              "$MGMT_URL"
+  printf "  ${YELLOW}%-26s${RESET} %s\n" ""                       "$MGMT_URL_HINT"
 fi
 
 if (( SKIP_DEVDEPLOY == 0 )) && [[ -n "$DEVDEPLOY_TOKEN" ]]; then
