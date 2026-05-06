@@ -111,7 +111,8 @@ Demo is live. Open these in your browser:
 
   BPMN Editor (Sandbox)  http://localhost:8480
     → Open file from URL  http://localhost:8090/bpmn/approval.bpmn
-  Management Console     http://localhost:8280  (connect with: local / http://localhost:8090)
+  Management Console     http://localhost:8281
+    → After deploy run    ./5-exec.sh console  # prints alias + URL to paste
   Task Console           http://localhost:8380
   Swagger UI             http://localhost:8080/q/swagger-ui/
   Quarkus Dev UI         http://localhost:8080/q/dev-ui/

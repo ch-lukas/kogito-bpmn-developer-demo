@@ -44,7 +44,7 @@ its own dev-services container and *does* reset on each teardown.
 |---|---|
 | **BPMN Editor** (local Sandbox) | **http://localhost:8480** |
 | BPMN file to import into the editor | http://localhost:8090/bpmn/approval.bpmn |
-| Management Console | http://localhost:8280 |
+| Management Console | http://localhost:8281 (after deploying, run `./5-exec.sh console` for the connect URL) |
 | Swagger UI | http://localhost:8080/q/swagger-ui/ |
 
 The full list (incl. Task Console, Dev UI, Data Index) is in [Cheat sheet — URLs](#cheat-sheet--urls) at the bottom.
@@ -502,7 +502,7 @@ git checkout -- workflow/src/main/resources/org/acme/travels/approval.bpmn
 |---|---|
 | BPMN Editor (local sandbox.kie.org) | http://localhost:8480 |
 | BPMN file the editor imports | http://localhost:8090/bpmn/approval.bpmn |
-| KIE Management Console | http://localhost:8280 |
+| KIE Management Console | http://localhost:8281 |
 | Task Console (optional) | http://localhost:8380 |
 | Quarkus Swagger UI | http://localhost:8080/q/swagger-ui/ |
 | Quarkus Dev UI | http://localhost:8080/q/dev-ui/ |
