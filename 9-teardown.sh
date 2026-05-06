@@ -6,9 +6,9 @@
 # things shared with other Kogito demos stay put.
 #
 # Usage:
-#   ./3-teardown.sh                 # stop containers + cors-proxy
-#   ./3-teardown.sh --wipe-data     # also delete ./data (persistence dir)
-#   ./3-teardown.sh --full          # nuke kind cluster + demo Docker
+#   ./9-teardown.sh                 # stop containers + cors-proxy
+#   ./9-teardown.sh --wipe-data     # also delete ./data (persistence dir)
+#   ./9-teardown.sh --full          # nuke kind cluster + demo Docker
 #                                   # images + ./data + uninstall kind &
 #                                   # kubectl (best-effort via brew)
 set -uo pipefail
@@ -33,7 +33,6 @@ if (( FULL == 1 )); then WIPE_DATA=1; fi
 DEMO_IMAGES=(
   "apache/incubator-kie-kogito-management-console:10.1.0"
   "apache/incubator-kie-sandbox-webapp:10.1.0"
-  "apache/incubator-kie-sandbox-extended-services:10.1.0"
   "apache/incubator-kie-sandbox-dev-deployment-quarkus-blank-app:10.1.0"
   "apache/incubator-kie-sandbox-dev-deployment-quarkus-blank-app:10.1.0-svg"
   "alpine/curl:latest"
@@ -47,17 +46,16 @@ DEMO_IMAGE_PATTERNS=(
 say "Stopping demo services…"
 
 # Containers (idempotent — silent if not present).
-for c in kogito-cors-proxy kogito-mgmt-console kogito-mgmt-console-cloud kogito-task-console kogito-bpmn-editor kie-extended-services; do
+for c in kogito-mgmt-console kogito-mgmt-console-cloud kogito-task-console kogito-bpmn-editor; do
   if docker rm -f "$c" >/dev/null 2>&1; then ok "removed $c container"; fi
 done
 
-# Stragglers from the pre-containerized cors-proxy era — host-side node
-# processes that previous ./1-run.sh runs left behind. Harmless if none.
+# Background CORS proxy
 if pids=$(pgrep -f 'cors-proxy\.js' 2>/dev/null); then
-  echo "$pids" | xargs kill -9 2>/dev/null && ok "killed stale host-side cors-proxy ($pids)"
+  echo "$pids" | xargs kill 2>/dev/null && ok "stopped cors-proxy"
 fi
 
-# Free our host ports if anything is squatting them.
+# Free our two host ports if anything is squatting them.
 for port in 8090 8480 8281; do
   if pids=$(lsof -ti:$port 2>/dev/null); then
     echo "$pids" | xargs kill 2>/dev/null

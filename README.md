@@ -1,35 +1,46 @@
-# Kogito BPMN for Developers — a 10-minute live demo
+# Kogito BPMN for Analysts — a 10-minute live demo
 
-> **The pitch:** open a business-process diagram in VS Code, run one command,
-> and you have a working REST service, a process-state dashboard, and a
-> task inbox — all driven by the diagram itself. Edit the diagram, save,
-> see it live. No glue code.
+> **The pitch:** open http://localhost:8480 — that's a local copy of
+> [sandbox.kie.org](https://sandbox.kie.org) running on your laptop, the
+> visual BPMN editor where you create and edit processes. Run one
+> command and you also get a local Kubernetes cluster (kind) ready to
+> receive the editor's **Dev Deployments**: click Deploy and your BPMN
+> becomes a real Quarkus REST service running in K8s, observable in the
+> Management Console with a live diagram + active-step highlight. No
+> IDE, no glue code, no separate build step.
 
 ![Headline screenshot — Management Console showing the BPMN diagram with a live execution token](docs/screenshots/01-hero.png)
 
-[Apache KIE](https://kie.apache.org/) (incubating) is the open-source process- and decision-automation
-project behind this demo. Originally developed at Red Hat as Drools and jBPM, it has powered
-business-rule and workflow engines in production for two decades and now underpins commercial
-platforms such as Red Hat Process Automation Manager. It stands out among
-long-running workflow engines for its speed and cloud-native, container-first
-architecture.
+[Apache KIE](https://kie.apache.org/) (incubating) is the open-source
+process- and decision-automation project behind this demo. Originally
+developed at Red Hat as Drools and jBPM, it has powered business-rule
+and workflow engines in production for two decades and now underpins
+commercial platforms such as Red Hat Process Automation Manager. It
+stands out among long-running workflow engines for its speed and
+cloud-native, container-first architecture.
 
 ## What you'll see
 
-- A real **BPMN 2.0 diagram** modelled in VS Code becomes an executable service.
-- The **Apache KIE / jBPM** engine code-generates a REST API around the diagram at build time.
-- A **Management Console** shows live process instances with the diagram highlighting where each instance is.
-- A **Task Console** delivers an inbox for human approvals.
-- The model encodes a real compliance pattern (the **four-eye principle** —
-  two different managers must approve) and the engine enforces it.
+- A real **BPMN 2.0 diagram** authored in your browser (a local **KIE
+  Sandbox**, the same UI as sandbox.kie.org) becomes an executable
+  Quarkus service running in **a real Kubernetes cluster** — no
+  separate build step on your machine.
+- The deployed Quarkus runtime code-generates a **REST API** around the
+  diagram at deploy time. Endpoints are named after BPMN tasks; rename a
+  step in the editor and the URL changes too.
+- A **Management Console** shows live process instances with the
+  diagram lighting up the active step in red.
+- Analysts edit, redeploy, and watch the new version run side-by-side
+  with the previous one — no IDE, no Maven, no engineer involved.
 
 ## Why it matters (for a non-technical audience)
 
-Most "low-code" workflow tools force you to choose between a polished business
-view and a real engineering toolchain. With the KIE / Kogito stack, the BPMN
-diagram **is** the source of truth for both — your business analysts read the
-same artefact your engineers ship to production. Every step in the diagram
-becomes an inspectable, observable, auditable event in a real system.
+Most "low-code" workflow tools force you to choose between a polished
+business view and a real engineering toolchain. With the KIE / Kogito
+stack, the BPMN diagram **is** the source of truth for both — the same
+file the business analyst edits is what the engine compiles to a real
+Quarkus container in production. Every step in the diagram becomes an
+inspectable, observable, auditable event in a real system.
 
 ## How to run
 
@@ -38,26 +49,14 @@ becomes an inspectable, observable, auditable event in a real system.
 | Tool | Version | macOS | Linux (Debian / Ubuntu) | Windows |
 |---|---|---|---|---|
 | Docker Desktop | 24+ | `brew install --cask docker` | `sudo apt install docker.io docker-compose-plugin` | [Docker Desktop installer](https://www.docker.com/products/docker-desktop/) |
-| JDK 17 | 17.x | `brew install --cask temurin@17` | `sudo apt install temurin-17-jdk` (after [adding the Adoptium repo](https://adoptium.net/installation/linux/)) | `winget install EclipseAdoptium.Temurin.17.JDK` |
-| Maven | 3.9+ | `brew install maven` | `sudo apt install maven` | `winget install Apache.Maven` |
 | Node | 18+ | `brew install node` | `sudo apt install nodejs npm` | `winget install OpenJS.NodeJS.LTS` |
+| kind | 0.20+ | `brew install kind` | [kind quick start](https://kind.sigs.k8s.io/docs/user/quick-start/) | `winget install Kubernetes.kind` |
+| kubectl | 1.28+ | `brew install kubectl` | `sudo apt install kubectl` (after [adding the k8s apt repo](https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/)) | `winget install Kubernetes.kubectl` |
 
-`1-run.sh` checks all of these and explains anything missing. On Windows,
-run the script from **WSL2** — the orchestration relies on a POSIX shell.
-
-### Optional but strongly recommended: VS Code + the Apache KIE BPMN editor
-
-The demo *runs* without an IDE, but for the headline visual of "edit the
-diagram, save, see it live" you'll want a graphical BPMN editor. The
-**[Apache KIE Kogito Bundle](https://marketplace.visualstudio.com/items?itemName=kie-group.vscode-extension-kogito-bundle)**
-extension turns any `.bpmn` / `.bpmn2` / `.dmn` file in your editor into a
-graphical canvas with a properties panel — same engine that powers
-[sandbox.kie.org](https://sandbox.kie.org).
-
-| | macOS | Linux | Windows |
-|---|---|---|---|
-| **VS Code** | `brew install --cask visual-studio-code` | `sudo snap install code --classic` | `winget install Microsoft.VisualStudioCode` |
-| **KIE extension** | `code --install-extension kie-group.vscode-extension-kogito-bundle` (any platform — same command) | | |
+That's it — no JDK, no Maven, no IDE. The Quarkus build happens
+**inside the kind cluster**, in a pod the Sandbox spins up at deploy
+time. You can skip kind+kubectl and the cluster setup with
+`./1-run.sh --no-devdeploy`, but then there's nowhere to deploy to.
 
 ### Setup — one command
 
@@ -68,109 +67,153 @@ cd kogito-bpmn-developer-demo
 ```
 
 `1-run.sh` will:
-1. Verify prerequisites (and auto-set `JAVA_HOME` to your JDK 17 on macOS).
-2. Pull / retag the required Docker images (works around an upstream tag mismatch).
-3. Start the Quarkus workflow, the CORS proxy, and both consoles.
-4. Print the URLs to open.
+1. Verify prerequisites.
+2. Pull the BPMN Editor and Management Console images.
+3. Build and load a **patched dev-deploy image** into kind that adds the
+   `kogito-addons-quarkus-process-svg` add-on (so the Mgmt Console can
+   render the live diagram for any deployed BPMN).
+4. Start the BPMN Editor (:8480) and Management Console (:8281).
+5. Create a **kind** Kubernetes cluster, install nginx ingress, apply
+   the Sandbox's K8s API proxy + RBAC, and print the wizard values for
+   **Dev Deployments**.
+6. Print the URLs and the wizard values to paste into the editor's
+   "Connect to Kubernetes" wizard.
 
-#### Running `1-run.sh` on each OS
+#### Running on each OS
 
 | OS | How to invoke | Extra setup |
 |---|---|---|
-| **macOS** | `./1-run.sh` from a Terminal tab | None — script auto-detects JDK 17 via `/usr/libexec/java_home`. |
-| **Linux** | `./1-run.sh` from your shell | Set `JAVA_HOME` to a JDK 17 install before running (e.g. `export JAVA_HOME=$(update-java-alternatives -l \| awk '/temurin-17/{print $3}')`). Make sure `lsof` and `pgrep` are installed (`sudo apt install lsof procps`). |
-| **Windows (WSL2)** | Open **Ubuntu** (or any WSL2 distro), `cd` into the cloned repo, run `./1-run.sh` | Install Docker Desktop on Windows and enable its WSL2 integration. Inside WSL2, `sudo apt install lsof procps` if missing. |
-| **Windows (native PowerShell / cmd)** | **Not supported.** Use WSL2. | The script relies on bash, `lsof`, `pgrep`, and POSIX nohup; native Windows shells don't have these. |
+| **macOS** | `./1-run.sh` from a Terminal tab | None |
+| **Linux** | `./1-run.sh` from your shell | `sudo apt install lsof procps` if missing |
+| **Windows (WSL2)** | Open a WSL2 distro, `cd` into the cloned repo, run `./1-run.sh` | Install Docker Desktop on Windows + enable WSL2 integration. Inside WSL2: `sudo apt install lsof procps` if missing |
+| **Windows (PowerShell / cmd)** | **Not supported** — use WSL2 | bash + lsof + pgrep are required |
 
-If `./1-run.sh` reports `permission denied`, run `chmod +x 1-run.sh 2-demo.sh 3-teardown.sh` once after cloning.
+If `./1-run.sh` reports `permission denied`:
+`chmod +x 1-run.sh 3-teardown.sh 2-exec.sh`.
 
-You'll see something like this:
+You'll see something like this at the end:
 
 ```
 Demo is live. Open these in your browser:
 
-  Management Console    http://localhost:8280  (connect with: local / http://localhost:8090)
-  Task Console          http://localhost:8380
-  Swagger UI            http://localhost:8080/q/swagger-ui/
-  Quarkus Dev UI        http://localhost:8080/q/dev-ui/
-  Data Index GraphiQL   http://localhost:8180/graphiql/
+  BPMN Editor (Sandbox)  http://localhost:8480
+    → Open file from URL  http://localhost:8090/bpmn/approval.bpmn
+  Management Console     http://localhost:8281
+    → After deploy run    ./2-exec.sh console  # prints alias + URL to paste
+
+▶ Dev Deployments — paste these into the editor's wizard:
+  Namespace             local-kie-sandbox-dev-deployments
+  Kubernetes API URL    http://localhost/kube-apiserver
+  Token                 eyJhbGciOi…  (full token: logs/devdeploy-wizard.txt)
+  Editor route:        http://localhost:8480 → Dev Deployments ▾ → Connect to an account…
 ```
 
-When you're done: `./3-teardown.sh`.
+### Cleanup
 
-### Drive the process end-to-end
+```bash
+./3-teardown.sh             # stop containers + cors-proxy; preserve cluster + images
+./3-teardown.sh --wipe-data # also delete ./data
+./3-teardown.sh --full      # nuke kind cluster, prune demo images, wipe data, brew-uninstall kind/kubectl
+```
 
-Run `./2-demo.sh` from another terminal to walk through the full lifecycle
-(start a process, complete first-line approval, complete second-line as a
-*different* manager, see the process disappear from the active list).
+Default is gentle on purpose so the next `./1-run.sh` starts in ~30 s
+and other Kogito work on the same machine isn't disturbed.
 
 ## Walkthrough
 
-For the click-by-click presenter script — designed to be delivered live in
-~10 minutes — see [DEMO.md](./DEMO.md). It covers eight scenes including
-the headline visual (BPMN diagram with a live execution token), the
-four-eye principle in action, and hot-reload of the model during the demo.
+For the click-by-click presenter script — designed to be delivered
+live in ~10 minutes — see [DEMO.md](./DEMO.md). Eight scenes from
+"open the editor" through "deploy to Kubernetes from the browser" to
+"edit, redeploy, see two versions side by side".
+
+Most useful single command after setup:
+
+```bash
+./2-exec.sh                 # prints all subcommands
+./2-exec.sh swagger         # opens the deployed Quarkus's Swagger UI
+./2-exec.sh console         # prints the URL to paste into the Mgmt Console
+./2-exec.sh start hiring '{"candidate":"Alice","experience":7,"skills":"Java"}'
+```
 
 ## Architecture
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │                       Browser tabs                           │
-│  ┌─────────┐ ┌────────────┐ ┌──────────┐ ┌──────────────┐    │
-│  │ VS Code │ │ Mgmt :8280 │ │ Task:8380│ │ Swagger:8080 │    │
-│  └─────────┘ └─────┬──────┘ └────┬─────┘ └──────┬───────┘    │
-└────────────────────┼─────────────┼──────────────┼────────────┘
-                     │             │              │
-                     ▼             ▼              ▼
-           ┌─────────────────────────────┐   ┌───────────┐
-           │ CORS proxy :8090            │   │Direct REST│
-           │   /graphql → :8180          │   └─────┬─────┘
-           │   *        → :8080          │         │
-           └──┬──────────────────────┬───┘         │
-              ▼                      ▼             ▼
-      ┌──────────────┐       ┌──────────────────────────┐
-      │ Data Index   │       │  Quarkus workflow :8080   │
-      │  :8180       │◀──────│  (Kogito + jBPM)         │
-      │  (GraphQL)   │       │   • approval.bpmn        │
-      └──────────────┘       │   • Auto-generated REST  │
-                             │   • Process management   │
-                             └──────────────────────────┘
+│  ┌──────────────┐  ┌─────────────────┐                       │
+│  │ BPMN Editor  │  │   Management    │                       │
+│  │ (Sandbox)    │  │   Console       │                       │
+│  │   :8480      │  │   :8281         │                       │
+│  └──────┬───────┘  └────────┬────────┘                       │
+└─────────┼───────────────────┼────────────────────────────────┘
+          │                   │
+          ▼                   ▼
+   ┌────────────────────────────────────────────────────────┐
+   │ CORS proxy :8090                                        │
+   │   /bpmn/<file>      → samples/<file>                    │
+   │   /viewer/<id>/<p>  → in-proxy KIE read-only editor     │
+   │   /cluster/<id>/*   → kind ingress :80                  │
+   └─────────────────────────┬───────────────────────────────┘
+                             │
+                             ▼
+   ┌────────────────────────────────────────────────────────┐
+   │ kind cluster (kie-sandbox-dev-cluster)                  │
+   │ ┌────────────────────────────────────────────────────┐  │
+   │ │ ingress-nginx :80                                   │  │
+   │ │   /dev-deployment-<id>/* → Service → Quarkus pod    │  │
+   │ │ ┌────────────────────────────────────────────────┐  │  │
+   │ │ │ Quarkus pod  (built from BPMN at deploy time)   │  │  │
+   │ │ │   - kogito-addons-quarkus-process-svg ✦         │  │  │
+   │ │ │   - process-management, data-index-jpa, jobs    │  │  │
+   │ │ │   - REST API auto-generated from BPMN           │  │  │
+   │ │ └────────────────────────────────────────────────┘  │  │
+   │ │   ✦ added on top of the upstream Sandbox base image │  │
+   │ │     by images/dev-deployment-quarkus-blank-app-svg/ │  │
+   │ └────────────────────────────────────────────────────┘  │
+   └────────────────────────────────────────────────────────┘
 ```
 
 ### Why the CORS proxy?
 
-The 10.x KIE Management Console is built for OIDC-secured production workflows.
-Pointing it at an unsecured local Quarkus app trips on (a) CORS missing on the
-workflow's `/` and 404 responses and (b) `Access-Control-Allow-Origin`
-duplication when both the workflow and an upstream layer set headers. The proxy
-([cors-proxy.js](./cors-proxy.js)) is ~80 lines of zero-dependency Node that
-strips upstream CORS headers and injects a single, spec-compliant set for the
-console's origin. It also routes `/graphql` to the Data Index and everything
-else to the workflow.
+The Management Console is built for OIDC-secured production workflows.
+Pointing it at the kind cluster's nginx ingress directly trips on
+duplicate CORS headers + same-origin restrictions. The proxy
+([cors-proxy.js](./cors-proxy.js)) is a zero-dependency Node script
+that:
 
-### Custom additions on top of the upstream example
+- Rewrites `/cluster/<deployId>/<rest>` to
+  `/dev-deployment-<deployId>/<rest>` on the kind ingress, with
+  consistent CORS headers — that's how the Mgmt Console reaches the
+  deployed Quarkus.
+- Serves the starter BPMN at `/bpmn/<file>.bpmn` from `samples/` so the
+  editor can import via URL.
+- Hosts a tiny in-proxy read-only KIE editor at `/viewer/<id>/<p>` for
+  quick "what does this deployed BPMN look like?" tabs.
 
-This is a fork of [`process-usertasks-quarkus`](https://github.com/apache/incubator-kie-kogito-examples/tree/10.1.x/kogito-quarkus-examples/process-usertasks-quarkus)
-from Apache KIE. The additions are:
+### Custom additions
 
-- **`workflow/pom.xml`** — three add-ons the Management Console needs (`process-management`, `process-svg`, `source-files`).
-- **`workflow/src/main/resources/application.properties`** — CORS config, dev services switches, and `kogito.service.url` pointing at the proxy so the data-index advertises the right URL to the console.
-- **`workflow/src/main/java/org/acme/travels/RootResource.java`** — JAX-RS endpoint at `/` so the console's auth probe gets a 200 with CORS headers.
-- **`cors-proxy.js`** — the path-routed CORS injector described above.
-- **`1-run.sh` / `3-teardown.sh`** — orchestration.
-- **`2-demo.sh`** — end-to-end driver.
+- **`images/dev-deployment-quarkus-blank-app-svg/Dockerfile`** — layered
+  patch on top of `apache/incubator-kie-sandbox-dev-deployment-quarkus-blank-app:10.1.0`
+  that adds `kogito-addons-quarkus-process-svg`. The Sandbox is told
+  via env var to deploy from this patched tag, so the cloud Mgmt
+  Console can render the diagram pane with a live token.
+- **`cors-proxy.js`** — described above.
+- **`samples/approval.bpmn`** — starter BPMN; loaded into the editor
+  via `http://localhost:8090/bpmn/approval.bpmn`.
+- **`1-run.sh` / `3-teardown.sh` / `2-exec.sh`** — orchestration and a
+  small CLI for driving deployments + opening tabs.
 - **`DEMO.md`** — presenter script.
 
 ## Reference links
 
 - Apache KIE: https://kie.apache.org
 - Kogito docs (10.1.x): https://kie.apache.org/docs/10.1.x/kogito/
-- Upstream example: https://github.com/apache/incubator-kie-kogito-examples/tree/10.1.x/kogito-quarkus-examples/process-usertasks-quarkus
-- BPMN editor (browser-only): https://sandbox.kie.org
+- KIE Sandbox: https://sandbox.kie.org
 
 ## Credits & license
 
-The Quarkus project under `workflow/` is forked from Apache KIE and
-remains under **Apache License 2.0** — see [NOTICE](./NOTICE) for the
-attribution. New material in this repo (orchestration scripts, CORS proxy,
-README, DEMO, etc.) is **MIT** — see [LICENSE](./LICENSE).
+The patched dev-deploy image and the local Sandbox + Mgmt Console
+container images are forked from Apache KIE and remain under
+**Apache License 2.0** — see [NOTICE](./NOTICE) for the attribution.
+New material in this repo (orchestration scripts, CORS proxy, README,
+DEMO, etc.) is **MIT** — see [LICENSE](./LICENSE).
