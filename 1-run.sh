@@ -268,6 +268,15 @@ if (( SKIP_DEVDEPLOY == 0 )); then
     --for=condition=ready pod --selector=app=kube-apiserver-proxy \
     --timeout=180s >/dev/null 2>&1 || warn "kube-apiserver-proxy not ready in 180s — continuing."
 
+  # Prune any leftover Dev Deployments whose pod restarted into the
+  # upload-wait state (Sandbox image is stateless; a Docker / kind
+  # restart wipes their BPMN payload). Saves the user from clicking
+  # 'Deploy' on something that will never wake up.
+  if kubectl --context "kind-$KIND_CLUSTER_NAME" get ns "$DEVDEPLOY_NS" >/dev/null 2>&1; then
+    say "Pruning stale Dev Deployments (upload-wait pods from previous sessions)…"
+    "$REPO_ROOT/2-exec.sh" prune-stale 2>&1 | sed 's/^/  /'
+  fi
+
   # Token may take a moment to populate in the secret.
   say "Extracting Sandbox service-account token…"
   for ((i=0; i<20; i++)); do

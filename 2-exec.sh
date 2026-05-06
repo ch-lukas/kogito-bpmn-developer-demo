@@ -17,6 +17,10 @@
 #                                            # into the cloud Mgmt Console (:8281)
 #   ./2-exec.sh viewer [process-id]          # open a read-only KIE editor
 #                                            # rendering the deployed BPMN
+#   ./2-exec.sh prune-stale                  # delete deployments whose pod
+#                                            # restarted into upload-wait state
+#                                            # (the Sandbox image is stateless;
+#                                            # a restart wipes its BPMN payload)
 #   ./2-exec.sh list   [process-id]          # list active instances
 #   ./2-exec.sh start  [process-id] [json]   # POST a new instance
 #   ./2-exec.sh get    [process-id] <iid>    # GET one instance
@@ -154,6 +158,34 @@ case "$cmd" in
     fi
     ;;
 
+  prune-stale)
+    # The Sandbox's dev-deploy image is stateless: when its pod restarts
+    # (Docker reboot, kind cycle, etc.) the BPMN it had baked-in is gone
+    # and the container falls back to the upload-wait service. Mgmt
+    # Console / 2-exec.sh / curl all 404 against it. Detect by health-
+    # probing each Ingress; if /q/health/ready isn't 200, prune the
+    # deploy/svc/ingress trio so the next 'Deploy' starts clean.
+    require kubectl
+    found=0; pruned=0
+    while IFS=$'\t' read -r label path; do
+      [[ -n "$label" && -n "$path" ]] || continue
+      found=$((found+1))
+      if curl -sf -o /dev/null --max-time 3 "${BASE_HOST}${path}/q/health/ready" 2>/dev/null; then
+        info "  ✓ ${label}  healthy on ${path}"
+      else
+        kubectl --context "$KIND_CONTEXT" -n "$NAMESPACE" \
+          delete deploy,svc,ingress -l "app=${label}" >/dev/null 2>&1 \
+          && pruned=$((pruned+1)) \
+          && info "  ✗ ${label}  stale (no Quarkus on ${path}) — pruned"
+      fi
+    done < <(
+      kubectl --context "$KIND_CONTEXT" -n "$NAMESPACE" get ingress \
+        -o jsonpath='{range .items[*]}{.metadata.labels.app}{"\t"}{.spec.rules[0].http.paths[0].path}{"\n"}{end}' \
+        2>/dev/null || true
+    )
+    info "scanned ${found} deployment(s), pruned ${pruned}"
+    ;;
+
   list)
     proc=${1:-$DEFAULT_PROCESS}
     call GET "/${proc}" | pretty
@@ -185,6 +217,6 @@ case "$cmd" in
     ;;
 
   *)
-    die "Unknown command: $cmd  (try: url|swagger|health|ls|console|viewer|list|start|get|tasks|complete)"
+    die "Unknown command: $cmd  (try: url|swagger|health|ls|console|viewer|prune-stale|list|start|get|tasks|complete)"
     ;;
 esac
