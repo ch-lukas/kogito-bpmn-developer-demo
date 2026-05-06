@@ -46,16 +46,17 @@ DEMO_IMAGE_PATTERNS=(
 say "Stopping demo services…"
 
 # Containers (idempotent — silent if not present).
-for c in kogito-mgmt-console kogito-mgmt-console-cloud kogito-task-console kogito-bpmn-editor; do
+for c in kogito-cors-proxy kogito-mgmt-console kogito-mgmt-console-cloud kogito-task-console kogito-bpmn-editor; do
   if docker rm -f "$c" >/dev/null 2>&1; then ok "removed $c container"; fi
 done
 
-# Background CORS proxy
+# Stragglers from the pre-containerized cors-proxy era — host-side node
+# processes that previous ./1-run.sh runs left behind. Harmless if none.
 if pids=$(pgrep -f 'cors-proxy\.js' 2>/dev/null); then
-  echo "$pids" | xargs kill 2>/dev/null && ok "stopped cors-proxy"
+  echo "$pids" | xargs kill -9 2>/dev/null && ok "killed stale host-side cors-proxy ($pids)"
 fi
 
-# Free our two host ports if anything is squatting them.
+# Free our host ports if anything is squatting them.
 for port in 8090 8480 8281; do
   if pids=$(lsof -ti:$port 2>/dev/null); then
     echo "$pids" | xargs kill 2>/dev/null

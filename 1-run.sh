@@ -86,21 +86,34 @@ docker pull apache/incubator-kie-sandbox-webapp:10.1.0            >/dev/null 2>&
 wait
 
 # -----------------------------------------------------------------------------
-# Start the CORS proxy (serves /bpmn/<file> for the editor + /cluster/<id>
-# rewrites for the cloud Mgmt Console + /viewer/<id>/<proc> read-only viewer)
+# Start the CORS proxy as a container (was a host-side `nohup node …`,
+# but bash job-control would print "Terminated: 15" on each re-run when
+# the previous proxy was killed by teardown). Docker manages the
+# lifecycle, no bash tracking, no notifications.
+#
+# Routes:
+#   /bpmn/<file>      → /app/samples/<file>   (bind-mount)
+#   /viewer/<id>/<p>  → in-proxy KIE read-only editor
+#   /cluster/<id>/*   → host.docker.internal:80 (kind ingress on host)
 # -----------------------------------------------------------------------------
 say "Starting CORS proxy on :8090"
-# `disown` after backgrounding so bash stops tracking the job — keeps
-# 3-teardown.sh's later pkill from printing "Terminated: 15" at the
-# top of the next ./1-run.sh.
-( cd "$REPO_ROOT" && nohup node cors-proxy.js > "$LOG_DIR/cors-proxy.log" 2>&1 ) &
-disown $! 2>/dev/null || true
+docker rm -f kogito-cors-proxy >/dev/null 2>&1 || true
+docker run -d --name kogito-cors-proxy \
+  -p 8090:8090 \
+  --add-host=host.docker.internal:host-gateway \
+  -v "$REPO_ROOT/cors-proxy.js:/app/cors-proxy.js:ro" \
+  -v "$REPO_ROOT/samples:/app/samples:ro" \
+  -e PORT=8090 \
+  -e CLUSTER_INGRESS=http://host.docker.internal \
+  -w /app \
+  node:18-alpine \
+  node cors-proxy.js >/dev/null
 for ((i=0; i<20; i++)); do
   if curl -sf -o /dev/null "http://localhost:8090/bpmn/approval.bpmn" 2>/dev/null; then break; fi
   sleep 0.5
 done
 curl -sf -o /dev/null "http://localhost:8090/bpmn/approval.bpmn" \
-  || die "CORS proxy not responding after 10s. See $LOG_DIR/cors-proxy.log."
+  || die "CORS proxy not responding after 10s. Logs: docker logs kogito-cors-proxy"
 ok "CORS proxy up on :8090"
 
 # -----------------------------------------------------------------------------
