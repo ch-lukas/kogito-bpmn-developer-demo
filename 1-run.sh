@@ -221,18 +221,36 @@ if (( SKIP_DEVDEPLOY == 0 )); then
 
     # If Docker Desktop was restarted between runs, the control-plane node
     # container is stopped *and* its host-side API port has shifted, so
-    # ~/.kube/config still points at the old port. Start the node and
-    # refresh kubeconfig before the cluster-info check.
+    # ~/.kube/config still points at the old port. Recover both.
     cp_container="${KIND_CLUSTER_NAME}-control-plane"
     if ! docker inspect -f '{{.State.Running}}' "$cp_container" 2>/dev/null | grep -qx true; then
       say "Starting stopped kind node ($cp_container)…"
-      docker start "$cp_container" >/dev/null 2>&1 || warn "could not start $cp_container — cluster may be broken"
-      for ((i=0; i<30; i++)); do
-        docker exec "$cp_container" sh -c 'true' >/dev/null 2>&1 && break
-        sleep 1
-      done
+      docker start "$cp_container" >/dev/null 2>&1 \
+        || die "Could not start $cp_container. Inspect with: docker logs $cp_container"
     fi
-    kind export kubeconfig --name "$KIND_CLUSTER_NAME" >/dev/null 2>&1 || true
+
+    # Always refresh kubeconfig — the host-side API port may have shifted
+    # even if the container was already running (e.g. Docker rebooted).
+    kind export kubeconfig --name "$KIND_CLUSTER_NAME" >/dev/null 2>&1 \
+      || warn "kind export kubeconfig failed — kubeconfig may be stale"
+
+    # Now wait for the kube-apiserver inside the container to actually
+    # answer. /healthz returns "ok" once the control plane is ready.
+    say "Waiting for kube-apiserver to become healthy…"
+    api_ok=false
+    for ((i=0; i<60; i++)); do
+      if kubectl --context "kind-$KIND_CLUSTER_NAME" get --raw=/healthz 2>/dev/null | grep -qx ok; then
+        api_ok=true; break
+      fi
+      # Re-export occasionally in case the port wasn't yet published when we
+      # first asked Docker.
+      if (( i == 10 || i == 30 )); then
+        kind export kubeconfig --name "$KIND_CLUSTER_NAME" >/dev/null 2>&1 || true
+      fi
+      sleep 1
+    done
+    $api_ok || die "kube-apiserver didn't answer /healthz within 60s. Try: ./3-teardown.sh && ./1-run.sh"
+    ok "kube-apiserver healthy"
   else
     # Port 80 is required by the kind cluster's ingress port-mapping. Only
     # checked when we're about to *create* the cluster — if the cluster is
@@ -256,8 +274,11 @@ if (( SKIP_DEVDEPLOY == 0 )); then
   # kind create cluster sets kubectl context to kind-<name> automatically.
   # Use /healthz instead of `cluster-info`: works across kubectl/server skew
   # and isn't fooled by RBAC noise on the default kubernetes-admin user.
-  kubectl --context "kind-$KIND_CLUSTER_NAME" get --raw=/healthz >/dev/null 2>&1 \
-    || die "kubectl can't reach kind context kind-$KIND_CLUSTER_NAME."
+  # (For the reuse path we already waited for /healthz above; this guards
+  # the freshly-created path.)
+  if ! kubectl --context "kind-$KIND_CLUSTER_NAME" get --raw=/healthz 2>/dev/null | grep -qx ok; then
+    die "kubectl can't reach kind context kind-$KIND_CLUSTER_NAME."
+  fi
 
   say "Installing nginx ingress controller…"
   kubectl apply --context "kind-$KIND_CLUSTER_NAME" -f "$INGRESS_MANIFEST_URL" \
