@@ -374,8 +374,14 @@ say "Demo is live. Open these in your browser:"
 echo
 printf "  ${GREEN}%-26s${RESET} %s\n" "BPMN Editor (Sandbox)" "$(url_link http://localhost:8480)"
 if (( SKIP_DEVDEPLOY == 0 )); then
-  printf "  ${YELLOW}%-26s${RESET} %s\n" "  → First-time setup"   "Dev Deployments ▾ → Connect to an account → Kubernetes;"
-  printf "  ${YELLOW}%-26s${RESET} %s\n" ""                       "paste values from $(file_link "$DEVDEPLOY_INFO_FILE") (also shown below)"
+  printf "  ${YELLOW}%-26s${RESET} %s\n" "  → First-time setup"   "Dev Deployments ▾ → Connect to an account → Kubernetes; paste:"
+  if [[ -n "$DEVDEPLOY_TOKEN" ]]; then
+    printf "  ${YELLOW}%-26s${RESET} %s\n" "      Namespace"          "$DEVDEPLOY_NS"
+    printf "  ${YELLOW}%-26s${RESET} %s\n" "      Kubernetes API URL" "$DEVDEPLOY_API_URL"
+    printf "  ${YELLOW}%-26s${RESET} %s\n" "      Token"              "${DEVDEPLOY_TOKEN:0:20}…  (full: $(file_link "$DEVDEPLOY_INFO_FILE"))"
+  else
+    printf "  ${YELLOW}%-26s${RESET} %s\n" ""                         "values in $(file_link "$DEVDEPLOY_INFO_FILE")"
+  fi
 fi
 if (( SKIP_DEVDEPLOY == 0 )); then
   printf "  ${GREEN}%-26s${RESET} %s\n" "Management Console" "$(url_link http://localhost:8281)"
@@ -411,14 +417,6 @@ if (( SKIP_DEVDEPLOY == 0 )); then
   printf "  ${YELLOW}%-26s${RESET} %s\n" ""                       "$MGMT_URL_HINT"
 fi
 
-if (( SKIP_DEVDEPLOY == 0 )) && [[ -n "$DEVDEPLOY_TOKEN" ]]; then
-  echo
-  printf "${CYAN}▶ Dev Deployments — paste these into the editor's wizard:${RESET}\n"
-  printf "  ${GREEN}%-22s${RESET} %s\n" "Namespace"          "$DEVDEPLOY_NS"
-  printf "  ${GREEN}%-22s${RESET} %s\n" "Kubernetes API URL" "$DEVDEPLOY_API_URL"
-  printf "  ${GREEN}%-22s${RESET} %s\n" "Token"              "${DEVDEPLOY_TOKEN:0:20}…  (full token: $(file_link "$DEVDEPLOY_INFO_FILE"))"
-  printf "  ${YELLOW}Editor route:${RESET}        $(url_link http://localhost:8480) → Dev Deployments ▾ → Connect to an account…\n"
-fi
 echo
 
 # -----------------------------------------------------------------------------
