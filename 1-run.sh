@@ -357,10 +357,14 @@ echo
 say "Demo is live. Open these in your browser:"
 echo
 printf "  ${GREEN}%-26s${RESET} %s\n" "BPMN Editor (Sandbox)" "http://localhost:8480"
-printf "  ${YELLOW}%-26s${RESET} %s\n" "  → Open file from URL"  "http://localhost:8090/bpmn/approval.bpmn"
+if (( SKIP_DEVDEPLOY == 0 )); then
+  printf "  ${YELLOW}%-26s${RESET} %s\n" "  → First-time setup"   "Dev Deployments ▾ → Connect to an account → Kubernetes;"
+  printf "  ${YELLOW}%-26s${RESET} %s\n" ""                       "paste values from $DEVDEPLOY_INFO_FILE (also shown below)"
+fi
 if (( SKIP_DEVDEPLOY == 0 )); then
   printf "  ${GREEN}%-26s${RESET} %s\n" "Management Console" "http://localhost:8281"
-  printf "  ${YELLOW}%-26s${RESET} %s\n" "  → After deploy run"  "./2-exec.sh console  # prints alias + URL to paste"
+  printf "  ${YELLOW}%-26s${RESET} %s\n" "  → First-time setup"   "+ Connect to a runtime; alias + URL come from"
+  printf "  ${YELLOW}%-26s${RESET} %s\n" ""                       "./2-exec.sh console (run after your first deploy)"
 fi
 
 if (( SKIP_DEVDEPLOY == 0 )) && [[ -n "$DEVDEPLOY_TOKEN" ]]; then
