@@ -39,8 +39,8 @@ Deployments feature. Auto-opens two browser tabs.
 |---|---|
 | **BPMN Editor** (local Sandbox) | **http://localhost:8480** |
 | Sample BPMN to import | http://localhost:8090/bpmn/approval.bpmn |
-| **Management Console** | **http://localhost:8281** (run `./5-exec.sh console` after first deploy for the connect URL) |
-| Cloud-deployed app's Swagger UI | run `./5-exec.sh swagger` |
+| **Management Console** | **http://localhost:8281** (run `./2-exec.sh console` after first deploy for the connect URL) |
+| Cloud-deployed app's Swagger UI | run `./2-exec.sh swagger` |
 
 > No local Quarkus, no IDE. The BPMN Editor at :8480 is the same
 > visual modeller that powers sandbox.kie.org, served entirely from
@@ -150,12 +150,12 @@ touched a pom.xml. Let me prove it's actually serving."*
 ### Ground truth from the terminal
 
 ```bash
-./5-exec.sh ls            # lists deployments + their path prefix
-./5-exec.sh url           # base URL + Swagger + health
-./5-exec.sh health        # → {"status":"UP", ...}
+./2-exec.sh ls            # lists deployments + their path prefix
+./2-exec.sh url           # base URL + Swagger + health
+./2-exec.sh health        # → {"status":"UP", ...}
 ```
 
-🖱  Run `./5-exec.sh swagger` — the deployed app's Swagger UI opens.
+🖱  Run `./2-exec.sh swagger` — the deployed app's Swagger UI opens.
 
 👀 Endpoints generated from the BPMN: `POST /approvals`, `GET
 /approvals`, `/approvals/{id}/firstLineApproval/{tid}` (or whatever
@@ -174,7 +174,7 @@ shape as a production deployment.
 🖱  In a terminal, start an instance:
 
 ```bash
-./5-exec.sh start approvals '{"traveller":{"firstName":"John","lastName":"Doe","email":"j@d","nationality":"American","address":{"street":"main","city":"Boston","zipCode":"10005","country":"US"}}}'
+./2-exec.sh start approvals '{"traveller":{"firstName":"John","lastName":"Doe","email":"j@d","nationality":"American","address":{"street":"main","city":"Boston","zipCode":"10005","country":"US"}}}'
 ```
 
 (Replace `approvals` with your process ID — Scene 2's Properties panel
@@ -186,11 +186,11 @@ user task waiting for a human.
 
 ### The Management Console
 
-🖱  Run `./5-exec.sh console` — prints the alias and URL to paste.
+🖱  Run `./2-exec.sh console` — prints the alias and URL to paste.
 
 🖱  Open http://localhost:8281, click **+ Connect to a runtime…**, paste:
 - **Alias:** `cloud`
-- **URL:** the URL `./5-exec.sh console` printed (looks like
+- **URL:** the URL `./2-exec.sh console` printed (looks like
   `http://localhost:8090/cluster/<deployId>`)
 
 🖱  Click **Process Instances** → click the row.
@@ -215,10 +215,10 @@ In a terminal:
 
 ```bash
 ID=<the-uuid-from-Scene-4>
-./5-exec.sh tasks approvals $ID            # find the task ID + name
+./2-exec.sh tasks approvals $ID            # find the task ID + name
 ```
 
-🖱  Complete via Swagger UI (`./5-exec.sh swagger`) — `POST
+🖱  Complete via Swagger UI (`./2-exec.sh swagger`) — `POST
 /approvals/{id}/firstLineApproval/{taskId}` with `{"approved":true}`,
 `?phase=complete`.
 
@@ -229,7 +229,7 @@ to the next user task.
 
 💬  *"Same diagram, advancing in real time. Now the 'production' part:
 swap kind for OpenShift, swap the paste-token for an OAuth flow, swap
-manual `5-exec.sh` calls for whatever orchestrates your real
+manual `2-exec.sh` calls for whatever orchestrates your real
 processes. The story stays identical — the diagram is the source of
 truth, the Quarkus runtime is the engine, the Mgmt Console is the
 operations dashboard."*
@@ -250,9 +250,9 @@ version is live."*
 👀 A *new* deployment appears alongside the previous one (each deploy
 gets its own ID).
 
-🖱  Run `./5-exec.sh ls` — both versions visible.
+🖱  Run `./2-exec.sh ls` — both versions visible.
 
-🖱  Run `./5-exec.sh console` to get the connect URL for the new one,
+🖱  Run `./2-exec.sh console` to get the connect URL for the new one,
 paste into the Mgmt Console as a *separate* runtime (alias `cloud-v2`
 or similar). Now you've got two versions of the process running side
 by side, each with its own dashboard.
@@ -301,7 +301,7 @@ stack:"*
 
 🖱  Stop everything:
 ```bash
-./9-teardown.sh
+./3-teardown.sh
 ```
 Default behaviour preserves the kind cluster, Docker images, and
 `./data` so the next run starts in ~30 s. Variants:
@@ -320,11 +320,11 @@ Default behaviour preserves the kind cluster, Docker images, and
 | BPMN Editor (local sandbox.kie.org) | http://localhost:8480 |
 | Sample BPMN to import | http://localhost:8090/bpmn/approval.bpmn |
 | Management Console | http://localhost:8281 |
-| Read-only KIE viewer for any deployed BPMN | run `./5-exec.sh viewer` |
-| Cloud-deployed app's Swagger UI | run `./5-exec.sh swagger` |
+| Read-only KIE viewer for any deployed BPMN | run `./2-exec.sh viewer` |
+| Cloud-deployed app's Swagger UI | run `./2-exec.sh swagger` |
 | CORS proxy (used internally by the consoles) | http://localhost:8090 |
 
-## Cheat sheet — `./5-exec.sh` subcommands
+## Cheat sheet — `./2-exec.sh` subcommands
 
 ```
 url               base URL + Swagger + health for the current deployment
@@ -341,7 +341,7 @@ complete [proc] <iid> <task-name> <tid> [json]   complete a user task
 ```
 
 Defaults to process-id `hiring`. Override with `DEFAULT_PROCESS=approvals
-./5-exec.sh ...` per-session.
+./2-exec.sh ...` per-session.
 
 ## Architecture (what's actually running)
 

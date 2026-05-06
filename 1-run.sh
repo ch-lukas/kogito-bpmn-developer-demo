@@ -11,7 +11,7 @@
 #   ./1-run.sh --no-open        # don't auto-open browser tabs
 #   ./1-run.sh --no-teardown    # don't clear previous state first
 #
-# Stop everything with: ./9-teardown.sh
+# Stop everything with: ./3-teardown.sh
 
 set -euo pipefail
 
@@ -60,13 +60,13 @@ ok "Docker daemon reachable"
 if [[ "${1:-}" == "--check" ]]; then ok "Prerequisite check complete."; exit 0; fi
 
 # -----------------------------------------------------------------------------
-# Clean previous run — idempotent. 9-teardown.sh is safe to invoke when nothing
+# Clean previous run — idempotent. 3-teardown.sh is safe to invoke when nothing
 # is running (it exits cleanly with no-ops). Skip with: ./1-run.sh --no-teardown
 # -----------------------------------------------------------------------------
 if [[ "${1:-}" != "--no-teardown" ]]; then
   say "Clearing any previous demo state…"
   # Default teardown preserves expensive things (kind cluster, images).
-  "$REPO_ROOT/9-teardown.sh" >/dev/null 2>&1 || true
+  "$REPO_ROOT/3-teardown.sh" >/dev/null 2>&1 || true
   ok "Previous state cleared"
 fi
 
@@ -81,7 +81,7 @@ wait
 # -----------------------------------------------------------------------------
 say "Starting CORS proxy on :8090"
 # `disown` after backgrounding so bash stops tracking the job — keeps
-# 9-teardown.sh's later pkill from printing "Terminated: 15" at the
+# 3-teardown.sh's later pkill from printing "Terminated: 15" at the
 # top of the next ./1-run.sh.
 ( cd "$REPO_ROOT" && nohup node cors-proxy.js > "$LOG_DIR/cors-proxy.log" 2>&1 ) &
 disown $! 2>/dev/null || true
@@ -200,7 +200,7 @@ if (( SKIP_DEVDEPLOY == 0 )); then
       fi
       sleep 1
     done
-    $api_ok || die "kube-apiserver didn't answer /healthz within 60s. Try: ./9-teardown.sh && ./1-run.sh"
+    $api_ok || die "kube-apiserver didn't answer /healthz within 60s. Try: ./3-teardown.sh && ./1-run.sh"
     ok "kube-apiserver healthy"
   else
     # Port 80 is required by the kind cluster's ingress port-mapping. Only
@@ -307,7 +307,7 @@ printf "  ${GREEN}%-26s${RESET} %s\n" "BPMN Editor (Sandbox)" "http://localhost:
 printf "  ${YELLOW}%-26s${RESET} %s\n" "  → Open file from URL"  "http://localhost:8090/bpmn/approval.bpmn"
 if (( SKIP_DEVDEPLOY == 0 )); then
   printf "  ${GREEN}%-26s${RESET} %s\n" "Management Console" "http://localhost:8281"
-  printf "  ${YELLOW}%-26s${RESET} %s\n" "  → After deploy run"  "./5-exec.sh console  # prints alias + URL to paste"
+  printf "  ${YELLOW}%-26s${RESET} %s\n" "  → After deploy run"  "./2-exec.sh console  # prints alias + URL to paste"
 fi
 
 if (( SKIP_DEVDEPLOY == 0 )) && [[ -n "$DEVDEPLOY_TOKEN" ]]; then
@@ -345,7 +345,7 @@ if [[ " $* " != *" --no-open "* ]]; then
   fi
 fi
 
-say "Drive deployments:   ./5-exec.sh  (start, list, viewer, console, …)"
+say "Drive deployments:   ./2-exec.sh  (start, list, viewer, console, …)"
 say "Logs:                tail -f $LOG_DIR/cors-proxy.log"
-say "Stop everything:     ./9-teardown.sh        (preserves kind cluster + images)"
-say "Full cleanup:        ./9-teardown.sh --full (deletes cluster, images, tools)"
+say "Stop everything:     ./3-teardown.sh        (preserves kind cluster + images)"
+say "Full cleanup:        ./3-teardown.sh --full (deletes cluster, images, tools)"

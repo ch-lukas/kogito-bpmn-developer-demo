@@ -89,7 +89,7 @@ cd kogito-bpmn-developer-demo
 | **Windows (PowerShell / cmd)** | **Not supported** — use WSL2 | bash + lsof + pgrep are required |
 
 If `./1-run.sh` reports `permission denied`:
-`chmod +x 1-run.sh 9-teardown.sh 5-exec.sh`.
+`chmod +x 1-run.sh 3-teardown.sh 2-exec.sh`.
 
 You'll see something like this at the end:
 
@@ -99,7 +99,7 @@ Demo is live. Open these in your browser:
   BPMN Editor (Sandbox)  http://localhost:8480
     → Open file from URL  http://localhost:8090/bpmn/approval.bpmn
   Management Console     http://localhost:8281
-    → After deploy run    ./5-exec.sh console  # prints alias + URL to paste
+    → After deploy run    ./2-exec.sh console  # prints alias + URL to paste
 
 ▶ Dev Deployments — paste these into the editor's wizard:
   Namespace             local-kie-sandbox-dev-deployments
@@ -111,9 +111,9 @@ Demo is live. Open these in your browser:
 ### Cleanup
 
 ```bash
-./9-teardown.sh             # stop containers + cors-proxy; preserve cluster + images
-./9-teardown.sh --wipe-data # also delete ./data
-./9-teardown.sh --full      # nuke kind cluster, prune demo images, wipe data, brew-uninstall kind/kubectl
+./3-teardown.sh             # stop containers + cors-proxy; preserve cluster + images
+./3-teardown.sh --wipe-data # also delete ./data
+./3-teardown.sh --full      # nuke kind cluster, prune demo images, wipe data, brew-uninstall kind/kubectl
 ```
 
 Default is gentle on purpose so the next `./1-run.sh` starts in ~30 s
@@ -129,10 +129,10 @@ live in ~10 minutes — see [DEMO.md](./DEMO.md). Eight scenes from
 Most useful single command after setup:
 
 ```bash
-./5-exec.sh                 # prints all subcommands
-./5-exec.sh swagger         # opens the deployed Quarkus's Swagger UI
-./5-exec.sh console         # prints the URL to paste into the Mgmt Console
-./5-exec.sh start hiring '{"candidate":"Alice","experience":7,"skills":"Java"}'
+./2-exec.sh                 # prints all subcommands
+./2-exec.sh swagger         # opens the deployed Quarkus's Swagger UI
+./2-exec.sh console         # prints the URL to paste into the Mgmt Console
+./2-exec.sh start hiring '{"candidate":"Alice","experience":7,"skills":"Java"}'
 ```
 
 ## Architecture
@@ -200,7 +200,7 @@ that:
 - **`cors-proxy.js`** — described above.
 - **`samples/approval.bpmn`** — starter BPMN; loaded into the editor
   via `http://localhost:8090/bpmn/approval.bpmn`.
-- **`1-run.sh` / `9-teardown.sh` / `5-exec.sh`** — orchestration and a
+- **`1-run.sh` / `3-teardown.sh` / `2-exec.sh`** — orchestration and a
   small CLI for driving deployments + opening tabs.
 - **`DEMO.md`** — presenter script.
 
