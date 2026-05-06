@@ -174,6 +174,15 @@ const server = http.createServer((req, res) => {
   const clusterMatch = req.url.match(/^\/cluster\/([A-Za-z0-9_-]+)(\/.*)?$/);
   const passThroughMatch = !clusterMatch &&
     req.url.match(/^\/dev-deployment-([A-Za-z0-9_-]+)(\/.*)?(?:\?.*)?$/);
+  // Bare endpoint URL (e.g. http://localhost:8090/dev-deployment-<id>) is what
+  // the Mgmt Console links to. The deployed Quarkus app serves nothing at /,
+  // so redirect to swagger-ui — the natural landing page for poking at the API.
+  if (passThroughMatch && (!passThroughMatch[2] || passThroughMatch[2] === '/')) {
+    const target = `/dev-deployment-${passThroughMatch[1]}/q/swagger-ui/`;
+    res.writeHead(302, { Location: target, ...corsHeaders(req) });
+    res.end();
+    return;
+  }
   if (clusterMatch || passThroughMatch) {
     const upstreamPath = clusterMatch
       ? `/dev-deployment-${clusterMatch[1]}${clusterMatch[2] || '/'}`
