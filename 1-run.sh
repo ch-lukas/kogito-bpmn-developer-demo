@@ -282,6 +282,14 @@ if (( SKIP_DEVDEPLOY == 0 )); then
   # nginx annotations on the same Ingress treat the path as a regex anyway,
   # so ImplementationSpecific is the correct pathType here.
   sed -i.bak 's/pathType: Prefix/pathType: ImplementationSpecific/g' "$RESOURCES_YAML"
+
+  # The bundled kube-apiserver-proxy pod downloads the *latest* kubectl
+  # from dl.k8s.io/release/stable.txt at start-up. Recent latest builds
+  # crash with SIGSEGV in golang.org/x/net@v0.49.0 http2 transport while
+  # serving requests, putting the pod in CrashLoopBackOff and breaking
+  # the editor's "Deploy" wizard. Pin to a known-good version.
+  KUBECTL_PIN="${KUBECTL_PIN:-v1.31.0}"
+  sed -i.bak2 "s|\\\$(curl -L -s https://dl.k8s.io/release/stable.txt)|${KUBECTL_PIN}|g" "$RESOURCES_YAML"
   kubectl apply --context "kind-$KIND_CLUSTER_NAME" -f "$RESOURCES_YAML" \
     > "$LOG_DIR/sandbox-resources-apply.log" 2>&1 \
     || die "Sandbox resources apply failed. See $LOG_DIR/sandbox-resources-apply.log."
