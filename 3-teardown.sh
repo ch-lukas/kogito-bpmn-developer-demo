@@ -40,6 +40,8 @@ DEMO_IMAGES=(
   "apache/incubator-kie-sandbox-webapp:10.1.0"
   "apache/incubator-kie-kogito-data-index-ephemeral:10.1.0"
   "apache/incubator-kie-kogito-data-index-ephemeral:10.1"
+  "apache/incubator-kie-sandbox-dev-deployment-quarkus-blank-app:10.1.0"
+  "apache/incubator-kie-sandbox-dev-deployment-quarkus-blank-app:10.1.0-svg"
   "testcontainers/sshd:1.2.0"
   "testcontainers/ryuk:0.8.1"
   "alpine/curl:latest"

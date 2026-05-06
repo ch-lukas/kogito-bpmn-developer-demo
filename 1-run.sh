@@ -196,10 +196,39 @@ if (( SKIP_DEVDEPLOY == 0 )); then
   ok "Mgmt Console (cloud) up on :8281"
 fi
 
+# Custom Dev Deployments base image: the upstream
+# apache/incubator-kie-sandbox-dev-deployment-quarkus-blank-app:10.1.0
+# does not include kie-addons-quarkus-process-svg, so the cloud Mgmt
+# Console can't render diagrams for cluster-deployed processes. We
+# layer that single dep on top in images/dev-deployment-quarkus-blank-app-svg/
+# and tell the Sandbox SPA to use the patched tag.
+DEVDEPLOY_IMG_BASE="apache/incubator-kie-sandbox-dev-deployment-quarkus-blank-app:10.1.0"
+DEVDEPLOY_IMG_SVG="${DEVDEPLOY_IMG_BASE%:*}:10.1.0-svg"
+DEVDEPLOY_IMG_DIR="$REPO_ROOT/images/dev-deployment-quarkus-blank-app-svg"
+
+if (( SKIP_DEVDEPLOY == 0 )); then
+  if ! docker image inspect "$DEVDEPLOY_IMG_SVG" >/dev/null 2>&1; then
+    say "Building patched dev-deploy image (adds process-svg add-on) → $DEVDEPLOY_IMG_SVG"
+    docker pull "$DEVDEPLOY_IMG_BASE" >/dev/null 2>&1 || true
+    docker build --platform linux/amd64 -t "$DEVDEPLOY_IMG_SVG" "$DEVDEPLOY_IMG_DIR" \
+      > "$LOG_DIR/dev-deploy-image-build.log" 2>&1 \
+      || die "Patched dev-deploy image build failed. See $LOG_DIR/dev-deploy-image-build.log."
+    ok "Patched dev-deploy image built"
+  else
+    ok "Patched dev-deploy image present: $DEVDEPLOY_IMG_SVG"
+  fi
+fi
+
 say "Starting BPMN Editor (local sandbox.kie.org) on :8480"
 docker rm -f kogito-bpmn-editor >/dev/null 2>&1 || true
-docker run -d --name kogito-bpmn-editor --platform linux/amd64 -p 8480:8080 \
-  apache/incubator-kie-sandbox-webapp:10.1.0 >/dev/null
+if (( SKIP_DEVDEPLOY == 0 )); then
+  docker run -d --name kogito-bpmn-editor --platform linux/amd64 -p 8480:8080 \
+    -e KIE_SANDBOX_DEV_DEPLOYMENT_QUARKUS_BLANK_APP_IMAGE_URL="docker.io/$DEVDEPLOY_IMG_SVG" \
+    apache/incubator-kie-sandbox-webapp:10.1.0 >/dev/null
+else
+  docker run -d --name kogito-bpmn-editor --platform linux/amd64 -p 8480:8080 \
+    apache/incubator-kie-sandbox-webapp:10.1.0 >/dev/null
+fi
 wait_http "http://localhost:8480/" 90 "BPMN Editor"
 ok "BPMN Editor up on :8480"
 
@@ -287,6 +316,17 @@ if (( SKIP_DEVDEPLOY == 0 )); then
     --for=condition=ready pod --selector=app.kubernetes.io/component=controller \
     --timeout=180s >/dev/null 2>&1 || warn "Ingress controller not ready in 180s — continuing anyway."
   ok "Ingress controller ready"
+
+  # Make the patched dev-deploy image available inside the kind cluster so
+  # the Sandbox doesn't try to pull it from a public registry (it only
+  # exists locally). Idempotent — re-loading is cheap if already present.
+  if docker image inspect "$DEVDEPLOY_IMG_SVG" >/dev/null 2>&1; then
+    say "Loading patched dev-deploy image into kind…"
+    kind load docker-image "$DEVDEPLOY_IMG_SVG" --name "$KIND_CLUSTER_NAME" \
+      > "$LOG_DIR/kind-load-svg-image.log" 2>&1 \
+      && ok "Patched dev-deploy image loaded into kind" \
+      || warn "kind load failed; see $LOG_DIR/kind-load-svg-image.log. The cloud Mgmt Console diagram pane will be blank until this succeeds."
+  fi
 
   say "Applying Sandbox Dev Deployments resources (proxy, RBAC, namespace)…"
   RESOURCES_YAML="$LOG_DIR/sandbox-resources.yaml"
