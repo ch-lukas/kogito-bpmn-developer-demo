@@ -149,27 +149,27 @@ Most useful single command after setup:
           │                   │
           ▼                   ▼
    ┌────────────────────────────────────────────────────────┐
-   │ CORS proxy :8090                                        │
-   │   /bpmn/<file>      → samples/<file>                    │
-   │   /viewer/<id>/<p>  → in-proxy KIE read-only editor     │
-   │   /cluster/<id>/*   → kind ingress :80                  │
-   └─────────────────────────┬───────────────────────────────┘
+   │ CORS proxy :8090                                       │
+   │   /bpmn/<file>      → samples/<file>                   │
+   │   /viewer/<id>/<p>  → in-proxy KIE read-only editor    │
+   │   /cluster/<id>/*   → kind ingress :80                 │
+   └─────────────────────────┬──────────────────────────────┘
                              │
                              ▼
    ┌────────────────────────────────────────────────────────┐
-   │ kind cluster (kie-sandbox-dev-cluster)                  │
-   │ ┌────────────────────────────────────────────────────┐  │
-   │ │ ingress-nginx :80                                   │  │
-   │ │   /dev-deployment-<id>/* → Service → Quarkus pod    │  │
-   │ │ ┌────────────────────────────────────────────────┐  │  │
-   │ │ │ Quarkus pod  (built from BPMN at deploy time)   │  │  │
-   │ │ │   - kogito-addons-quarkus-process-svg ✦         │  │  │
-   │ │ │   - process-management, data-index-jpa, jobs    │  │  │
-   │ │ │   - REST API auto-generated from BPMN           │  │  │
-   │ │ └────────────────────────────────────────────────┘  │  │
-   │ │   ✦ added on top of the upstream Sandbox base image │  │
-   │ │     by images/dev-deployment-quarkus-blank-app-svg/ │  │
-   │ └────────────────────────────────────────────────────┘  │
+   │ kind cluster (kie-sandbox-dev-cluster)                 │
+   │ ┌────────────────────────────────────────────────────┐ │
+   │ │ ingress-nginx :80                                  │ │
+   │ │   /dev-deployment-<id>/* → Service → Quarkus pod   │ │
+   │ │ ┌────────────────────────────────────────────────┐ │ │
+   │ │ │ Quarkus pod  (built from BPMN at deploy time)  │ │ │
+   │ │ │   - kogito-addons-quarkus-process-svg ✦        │ │ │
+   │ │ │   - process-management, data-index-jpa, jobs   │ │ │
+   │ │ │   - REST API auto-generated from BPMN          │ │ │
+   │ │ └────────────────────────────────────────────────┘ │ │
+   │ │   ✦ added on top of the upstream Sandbox base image│ │
+   │ │     by images/dev-deployment-quarkus-blank-app-svg/│ │
+   │ └────────────────────────────────────────────────────┘ │
    └────────────────────────────────────────────────────────┘
 ```
 
